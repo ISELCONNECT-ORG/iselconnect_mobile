@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
-import { Bell, AlertTriangle } from "lucide-react";
+import { Bell, AlertTriangle, XCircle } from "lucide-react";
 import { translations } from "../components/translations";
 import LoadingScreen from "../components/LoadingScreen";
 
@@ -24,6 +24,7 @@ function NotificationTab() {
       } = await supabase.auth.getUser();
       if (userError || !user) throw userError;
 
+      // 1. Fetch Standard Notifications
       const { data: standardNotifs, error: notifError } = await supabase
         .from("notifications")
         .select("*")
@@ -31,6 +32,7 @@ function NotificationTab() {
         .order("created_at", { ascending: false });
       if (notifError) throw notifError;
 
+      // 2. Fetch Upcoming Advisories based on Barangay
       const { data: userData, error: profileError } = await supabase
         .from("users")
         .select("barangay_id")
@@ -64,7 +66,34 @@ function NotificationTab() {
         }
       }
 
-      const combinedNotifs = [...(standardNotifs || []), ...upcomingAdvisories];
+      // 3. Fetch Rejected Reports to generate synthetic notifications
+      const { data: reportsData, error: reportsError } = await supabase
+        .from("reports")
+        .select("id, landmark, remarks, created_at, report_statuses(name)")
+        .eq("residents_id", user.id);
+
+      let rejectedNotifs = [];
+      if (!reportsError && reportsData) {
+        const rejected = reportsData.filter(
+          (r) => r.report_statuses?.name?.toUpperCase() === "REJECTED",
+        );
+
+        rejectedNotifs = rejected.map((rep) => ({
+          id: `rej-${rep.id}`,
+          title: "REPORT REJECTED",
+          message: `Your report at ${rep.landmark || "your location"} was rejected by the admin. ${rep.remarks ? `Reason: ${rep.remarks}` : "Please ensure reports follow guidelines."}`,
+          created_at: rep.created_at,
+          is_read: false,
+          is_rejected: true,
+        }));
+      }
+
+      // Combine all notifications and sort by date
+      const combinedNotifs = [
+        ...(standardNotifs || []),
+        ...upcomingAdvisories,
+        ...rejectedNotifs,
+      ];
       combinedNotifs.sort(
         (a, b) => new Date(b.created_at) - new Date(a.created_at),
       );
@@ -159,16 +188,22 @@ function NotificationTab() {
             <div
               key={notif.id}
               style={{
-                backgroundColor: notif.is_read ? "#ffffff" : "#f1f5f9",
+                backgroundColor: notif.is_rejected
+                  ? "#fef2f2"
+                  : notif.is_read
+                    ? "#ffffff"
+                    : "#f1f5f9",
                 borderRadius: "16px",
                 padding: "20px",
                 marginBottom: "12px",
                 boxShadow: "0 4px 10px rgba(0,0,0,0.04)",
-                border: notif.is_advisory
-                  ? "2px solid #fde047"
-                  : notif.is_read
-                    ? "1px solid #e2e8f0"
-                    : "2px solid #cbd5e1",
+                border: notif.is_rejected
+                  ? "2px solid #fca5a5"
+                  : notif.is_advisory
+                    ? "2px solid #fde047"
+                    : notif.is_read
+                      ? "1px solid #e2e8f0"
+                      : "2px solid #cbd5e1",
               }}
             >
               <div
@@ -179,15 +214,27 @@ function NotificationTab() {
                   marginBottom: "8px",
                 }}
               >
+                {notif.is_rejected && <XCircle size={18} color="#dc2626" />}
                 {notif.is_advisory && (
                   <AlertTriangle size={18} color="#b45309" />
                 )}
+                {!notif.is_rejected && !notif.is_advisory && (
+                  <Bell
+                    size={18}
+                    color={notif.is_read ? "#94a3b8" : "#1b0b8c"}
+                  />
+                )}
+
                 <h3
                   style={{
                     margin: 0,
                     fontSize: "1rem",
                     fontWeight: "900",
-                    color: notif.is_advisory ? "#b45309" : "#1e293b",
+                    color: notif.is_rejected
+                      ? "#dc2626"
+                      : notif.is_advisory
+                        ? "#b45309"
+                        : "#1e293b",
                   }}
                 >
                   {notif.title}
@@ -195,7 +242,7 @@ function NotificationTab() {
               </div>
               <p
                 style={{
-                  color: "#475569",
+                  color: notif.is_rejected ? "#991b1b" : "#475569",
                   fontSize: "0.95rem",
                   margin: "0 0 12px 0",
                   lineHeight: "1.5",
@@ -208,7 +255,7 @@ function NotificationTab() {
                 <span
                   style={{
                     fontSize: "0.8rem",
-                    color: "#94a3b8",
+                    color: notif.is_rejected ? "#f87171" : "#94a3b8",
                     fontWeight: "600",
                   }}
                 >

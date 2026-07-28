@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom"; // <-- Added this!
 import { supabase } from "../supabaseClient";
 import { User, Edit, Settings, Save, X } from "lucide-react";
 import SettingsTab from "./SettingsTab";
@@ -19,6 +20,7 @@ function ProfileTab({ onLogout }) {
   const [errorMsg, setErrorMsg] = useState("");
 
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -52,7 +54,7 @@ function ProfileTab({ onLogout }) {
       if (dbError) throw dbError;
       setProfile(userData);
     } catch (error) {
-      setErrorMsg(t.errorProfile); // Uses translation
+      setErrorMsg(t.errorProfile);
     } finally {
       setLoading(false);
     }
@@ -106,14 +108,15 @@ function ProfileTab({ onLogout }) {
 
       setIsEditing(false);
       setShowSaveModal(false);
+      setShowSuccessModal(true);
     } catch (error) {
-      alert(t.errorUpdate); // Uses translation
+      alert(t.errorUpdate);
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (loading) return <LoadingScreen message={t.loadingProfile} />; // Uses translation
+  if (loading) return <LoadingScreen message={t.loadingProfile} />;
 
   if (errorMsg)
     return (
@@ -157,32 +160,107 @@ function ProfileTab({ onLogout }) {
         boxSizing: "border-box",
       }}
     >
-      {showSaveModal && (
-        <div className="modal-overlay">
-          <div className="modal-box">
-            {/* Translated Title & Text */}
-            <h3 className="modal-title">{t.confirmChangesTitle}</h3>
-            <p className="modal-text">{t.confirmChangesText}</p>
-            <div className="modal-buttons">
-              <button
-                className="modal-btn cancel-btn"
-                onClick={() => setShowSaveModal(false)}
-                disabled={isSaving}
+      {/* 1. CONFIRMATION MODAL - Teleported to document.body! */}
+      {showSaveModal &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100vw",
+              height: "100vh",
+              backgroundColor: "rgba(0, 0, 0, 0.65)",
+              zIndex: 999999,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <div className="modal-box" style={{ margin: "0 20px" }}>
+              <h3 className="modal-title">Confirm Changes</h3>
+              <p className="modal-text">
+                Are you sure you want to save these profile changes?
+              </p>
+              <div className="modal-buttons">
+                <button
+                  className="modal-btn cancel-btn"
+                  onClick={() => setShowSaveModal(false)}
+                  disabled={isSaving}
+                >
+                  {t.cancelBtn || "Cancel"}
+                </button>
+                <button
+                  className="modal-btn confirm-btn"
+                  onClick={handleSaveProfile}
+                  disabled={isSaving}
+                  style={{ backgroundColor: "#1b0b8c" }}
+                >
+                  {isSaving ? t.savingBtn : t.saveBtn}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* 2. SUCCESS MODAL - Teleported to document.body! */}
+      {showSuccessModal &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100vw",
+              height: "100vh",
+              backgroundColor: "rgba(0, 0, 0, 0.65)",
+              zIndex: 999999,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <div
+              className="modal-box"
+              style={{
+                textAlign: "center",
+                padding: "30px 20px",
+                margin: "0 20px",
+              }}
+            >
+              <h3
+                className="modal-title"
+                style={{
+                  color: "#1b0b8c",
+                  fontWeight: "900",
+                  marginBottom: "10px",
+                  fontSize: "1.4rem",
+                }}
               >
-                {t.cancelBtn}
-              </button>
+                SUCCESS
+              </h3>
+              <p
+                className="modal-text"
+                style={{ marginBottom: "25px", color: "#475569" }}
+              >
+                Your profile has been successfully updated!
+              </p>
               <button
                 className="modal-btn confirm-btn"
-                onClick={handleSaveProfile}
-                disabled={isSaving}
-                style={{ backgroundColor: "#1b0b8c" }}
+                onClick={() => setShowSuccessModal(false)}
+                style={{
+                  backgroundColor: "#1b0b8c",
+                  width: "100%",
+                  borderRadius: "50px",
+                }}
               >
-                {isSaving ? t.savingBtn : t.saveBtn}
+                OK
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       <div
         className="profile-header-bg"
@@ -199,7 +277,6 @@ function ProfileTab({ onLogout }) {
 
       <div className="pt-info-wrapper">
         <h2 className="pt-name-heading">
-          {/* Translated Edit Title */}
           {isEditing ? t.editProfileTitle : fullName}
         </h2>
 
@@ -207,7 +284,6 @@ function ProfileTab({ onLogout }) {
           <>
             <div className="pt-data-grid page-transition">
               <div className="pt-data-row">
-                {/* Translated Labels */}
                 <span className="pt-data-label">{t.emailLabel}</span>
                 <span
                   className="pt-data-value"
@@ -247,7 +323,6 @@ function ProfileTab({ onLogout }) {
           </>
         ) : (
           <div className="pt-edit-form-wrapper page-transition">
-            {/* Translated Form Inputs */}
             <div className="edit-input-group">
               <label>{t.firstName}</label>
               <input

@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import ResidentReportDetail from "./ResidentReportDetail";
 import HotlinesTab from "./HotlinesTab";
-import SatisfactionSurveyModal from "./SatisfactionSurveyModal"; // NEW: Imported the Survey Modal
-import { Clock, Wrench, CheckCircle } from "lucide-react";
+import SatisfactionSurveyModal from "./SatisfactionSurveyModal";
+import { Clock, Wrench, CheckCircle, XCircle } from "lucide-react";
 import "../Resident.css";
 
 function HomeTab() {
@@ -15,7 +15,6 @@ function HomeTab() {
   const [showHotlines, setShowHotlines] = useState(false);
   const [filterStatus, setFilterStatus] = useState("ALL");
 
-  // NEW: State to track if there is a report that needs a rating
   const [reportToRate, setReportToRate] = useState(null);
 
   useEffect(() => {
@@ -41,7 +40,6 @@ function HomeTab() {
         setUserName(`${userData.first_name} ${userData.last_name}`);
       }
 
-      // UPGRADED QUERY: Now fetches remarks AND checks the report_ratings table to see if it was rated!
       const { data: reportsData, error: reportsError } = await supabase
         .from("reports")
         .select(
@@ -53,7 +51,6 @@ function HomeTab() {
       if (!reportsError && reportsData) {
         setUserReports(reportsData);
 
-        // AUTO-TRIGGER LOGIC: Find the most recent resolved report that has NO rating
         const unratedReport = reportsData.find(
           (r) =>
             (r.report_statuses?.name?.toUpperCase() === "RESOLVED" ||
@@ -76,6 +73,7 @@ function HomeTab() {
     const status = statusName?.toUpperCase() || "PENDING";
     if (status === "RESOLVED" || status === "APPROVED") return "#16a34a";
     if (status === "IN PROGRESS") return "#0ea5e9";
+    if (status === "REJECTED") return "#dc2626";
     return "#facc15";
   };
 
@@ -83,6 +81,7 @@ function HomeTab() {
     const status = statusName?.toUpperCase() || "PENDING";
     if (status === "RESOLVED" || status === "APPROVED") return "#16a34a";
     if (status === "IN PROGRESS") return "#0ea5e9";
+    if (status === "REJECTED") return "#dc2626";
     return "#ca8a04";
   };
 
@@ -98,6 +97,10 @@ function HomeTab() {
     (r) =>
       r.report_statuses?.name?.toUpperCase() === "RESOLVED" ||
       r.report_statuses?.name?.toUpperCase() === "APPROVED",
+  ).length;
+
+  const rejectedCount = userReports.filter(
+    (r) => r.report_statuses?.name?.toUpperCase() === "REJECTED",
   ).length;
 
   const filteredReports = userReports.filter((report) => {
@@ -137,14 +140,13 @@ function HomeTab() {
 
   return (
     <>
-      {/* 🚀 AUTO-TRIGGER SURVEY MODAL */}
       {reportToRate && (
         <SatisfactionSurveyModal
           report={reportToRate}
           onClose={() => setReportToRate(null)}
           onSuccess={() => {
             setReportToRate(null);
-            fetchHomeData(); // Refresh so it disappears from the unrated check
+            fetchHomeData();
           }}
         />
       )}
@@ -215,11 +217,17 @@ function HomeTab() {
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: "12px" }}>
+        {/* 2x2 Grid for Status Boxes */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "12px",
+          }}
+        >
           <div
             onClick={() => handleFilterClick("PENDING")}
             style={{
-              flex: 1,
               backgroundColor: "#fffbeb",
               border: "1px solid #fef08a",
               borderRadius: "16px",
@@ -263,7 +271,6 @@ function HomeTab() {
           <div
             onClick={() => handleFilterClick("IN PROGRESS")}
             style={{
-              flex: 1,
               backgroundColor: "#f0f9ff",
               border: "1px solid #bae6fd",
               borderRadius: "16px",
@@ -309,7 +316,6 @@ function HomeTab() {
           <div
             onClick={() => handleFilterClick("RESOLVED")}
             style={{
-              flex: 1,
               backgroundColor: "#f0fdf4",
               border: "1px solid #bbf7d0",
               borderRadius: "16px",
@@ -351,6 +357,53 @@ function HomeTab() {
               }}
             >
               RESOLVED
+            </p>
+          </div>
+
+          <div
+            onClick={() => handleFilterClick("REJECTED")}
+            style={{
+              backgroundColor: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: "16px",
+              padding: "16px 8px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              opacity:
+                filterStatus === "ALL" || filterStatus === "REJECTED" ? 1 : 0.4,
+              transform:
+                filterStatus === "REJECTED" ? "scale(1.05)" : "scale(1)",
+              transition: "all 0.2s ease",
+            }}
+          >
+            <XCircle
+              size={24}
+              color="#dc2626"
+              style={{ marginBottom: "6px" }}
+            />
+            <h3
+              style={{
+                margin: 0,
+                fontSize: "1.8rem",
+                color: "#dc2626",
+                fontWeight: "900",
+                lineHeight: "1",
+              }}
+            >
+              {rejectedCount}
+            </h3>
+            <p
+              style={{
+                margin: "4px 0 0 0",
+                fontSize: "0.7rem",
+                color: "#dc2626",
+                fontWeight: "800",
+              }}
+            >
+              REJECTED
             </p>
           </div>
         </div>

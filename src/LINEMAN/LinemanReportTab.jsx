@@ -331,9 +331,12 @@ function LinemanReportTab() {
                   >
                     {report.report_types?.priority_level || "Normal"} Priority
                   </span>
+
+                  {/* NEW: Displaying the Report ID right beside the report type name */}
                   <h3 className="lineman-report-title">
-                    {report.report_types?.name}
+                    {report.id}. {report.report_types?.name || "UNKNOWN ISSUE"}
                   </h3>
+
                   <p className="lineman-report-address">
                     {formatAddress(report)}
                   </p>

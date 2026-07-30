@@ -6,8 +6,6 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import {
   ChevronLeft,
-  Clock,
-  Wrench,
   CheckCircle,
   MapPin,
   Users,
@@ -44,7 +42,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     report.report_statuses?.name?.toUpperCase() || "PENDING",
   );
 
-  const [showStatusAlert, setShowStatusAlert] = useState(false);
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
@@ -64,8 +61,10 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
 
   const [linemanLocation, setLinemanLocation] = useState(null);
 
-  const isResolved = activeStatus === "RESOLVED";
+  const isResolved =
+    activeStatus === "RESOLVED" || activeStatus === "ADMIN VERIFIED";
   const isPendingVerification = activeStatus === "PENDING VERIFICATION";
+  const isLocked = isResolved || isPendingVerification;
 
   useEffect(() => {
     const fetchAssignmentDetails = async () => {
@@ -315,18 +314,10 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     };
   }, []);
 
-  const handleStatusClick = (statusName) => {
-    if (statusName === activeStatus || isResolved || isPendingVerification)
-      return;
-
-    if (statusName === "PENDING VERIFICATION") {
-      setPendingStatusUpdate("PENDING VERIFICATION");
-      setIsCameraOpen(true);
-      return;
-    }
-
-    setPendingStatusUpdate(statusName);
-    setShowStatusAlert(true);
+  const handleVerifyClick = () => {
+    if (isLocked) return;
+    setPendingStatusUpdate("PENDING VERIFICATION");
+    setIsCameraOpen(true);
   };
 
   const captureEvidence = useCallback(() => {
@@ -335,45 +326,37 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
       if (imageSrc) {
         setEvidencePhoto(imageSrc);
         setIsCameraOpen(false);
-
-        if (pendingStatusUpdate === "PENDING VERIFICATION") {
-          setIsRemarksOpen(true);
-        }
+        setIsRemarksOpen(true);
       }
     }
-  }, [webcamRef, pendingStatusUpdate]);
+  }, [webcamRef]);
 
   const confirmStatusUpdate = async () => {
     setIsSubmitting(true);
     try {
-      let newStatusId = 1;
-      if (pendingStatusUpdate === "PENDING") newStatusId = 1;
-      if (pendingStatusUpdate === "IN PROGRESS") newStatusId = 2;
-      if (pendingStatusUpdate === "PENDING VERIFICATION") newStatusId = 4;
+      if (!evidencePhoto) throw new Error("Evidence photo is missing.");
+      if (!resolutionRemarks.trim())
+        throw new Error("Remarks are required to verify resolution.");
 
-      const updatePayload = { status_id: newStatusId };
+      const fileName = `resolved-${report.id}-${Date.now()}.jpg`;
+      const imageBlob = base64ToBlob(evidencePhoto);
 
-      if (pendingStatusUpdate === "PENDING VERIFICATION") {
-        if (!evidencePhoto) throw new Error("Evidence photo is missing.");
-        if (!resolutionRemarks.trim())
-          throw new Error("Remarks are required to verify resolution.");
+      const { error: uploadError } = await supabase.storage
+        .from("report_photos")
+        .upload(fileName, imageBlob, { contentType: "image/jpeg" });
 
-        const fileName = `resolved-${report.id}-${Date.now()}.jpg`;
-        const imageBlob = base64ToBlob(evidencePhoto);
+      if (uploadError) throw new Error("Failed to upload evidence photo.");
 
-        const { error: uploadError } = await supabase.storage
-          .from("report_photos")
-          .upload(fileName, imageBlob, { contentType: "image/jpeg" });
+      const { data: publicUrlData } = supabase.storage
+        .from("report_photos")
+        .getPublicUrl(fileName);
 
-        if (uploadError) throw new Error("Failed to upload evidence photo.");
-
-        const { data: publicUrlData } = supabase.storage
-          .from("report_photos")
-          .getPublicUrl(fileName);
-
-        updatePayload.resolved_photo_url = publicUrlData.publicUrl;
-        updatePayload.remarks = resolutionRemarks.trim();
-      }
+      // Status 4 = PENDING VERIFICATION
+      const updatePayload = {
+        status_id: 4,
+        resolved_photo_url: publicUrlData.publicUrl,
+        remarks: resolutionRemarks.trim(),
+      };
 
       const { data, error } = await supabase
         .from("reports")
@@ -385,33 +368,23 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
       if (!data || data.length === 0)
         throw new Error("Update blocked by Supabase!");
 
-      if (
-        pendingStatusUpdate === "IN PROGRESS" ||
-        pendingStatusUpdate === "PENDING VERIFICATION"
-      ) {
-        const assignmentPayload =
-          pendingStatusUpdate === "IN PROGRESS"
-            ? { arrival_at: new Date().toISOString() }
-            : { completion_at: new Date().toISOString() };
-
-        await supabase
-          .from("assignments")
-          .update(assignmentPayload)
-          .eq("report_id", report.id);
-      }
+      // Update the completion_at timestamp in assignments
+      await supabase
+        .from("assignments")
+        .update({ completion_at: new Date().toISOString() })
+        .eq("report_id", report.id);
 
       await logSystemAction(
         "UPDATE_REPORT_STATUS",
-        `Lineman updated report #${report.id} status to ${pendingStatusUpdate}.`,
+        `Lineman submitted report #${report.id} for verification.`,
       );
 
-      setActiveStatus(pendingStatusUpdate);
+      setActiveStatus("PENDING VERIFICATION");
       setShowSuccessModal(true);
     } catch (err) {
       alert(err.message);
     } finally {
       setIsSubmitting(false);
-      setShowStatusAlert(false);
       setIsRemarksOpen(false);
       setPendingStatusUpdate(null);
     }
@@ -796,44 +769,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
       className="detail-layout page-transition"
       style={{ overscrollBehavior: "none" }}
     >
-      {showStatusAlert && (
-        <div className="custom-alert-overlay">
-          <div className="custom-alert-box">
-            <div className="custom-alert-header">
-              <h2>{t.confirmationTitle}</h2>
-            </div>
-            <div className="custom-alert-body">
-              <p>
-                {t.confirmStatusUpdate}{" "}
-                {pendingStatusUpdate === "IN PROGRESS"
-                  ? t.inProgress
-                  : t.pending}
-                ?
-              </p>
-              <div className="custom-alert-buttons">
-                <button
-                  className="alert-btn no-btn"
-                  onClick={() => {
-                    setShowStatusAlert(false);
-                    setPendingStatusUpdate(null);
-                  }}
-                  disabled={isSubmitting}
-                >
-                  {t.noBtn}
-                </button>
-                <button
-                  className="alert-btn yes-btn"
-                  onClick={confirmStatusUpdate}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? t.savingBtn : t.yesBtn}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showSuccessModal && (
         <div className="success-modal-overlay">
           <div className="success-modal-box">
@@ -841,15 +776,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               <h2>{t.updatedTitle}</h2>
             </div>
             <div className="success-modal-body">
-              <p>
-                {t.statusUpdatedText}{" "}
-                {activeStatus === "PENDING VERIFICATION"
-                  ? "PENDING VERIFICATION"
-                  : activeStatus === "IN PROGRESS"
-                    ? t.inProgress
-                    : t.pending}
-                !
-              </p>
+              <p>{t.statusUpdatedText} PENDING VERIFICATION!</p>
               <button
                 className="success-modal-btn"
                 onClick={() => {
@@ -906,7 +833,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           </h2>
         </div>
 
-        {(isResolved || isPendingVerification) && (
+        {isLocked && (
           <div
             style={{
               margin: "0 0 15px 0",
@@ -1140,46 +1067,25 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         style={{
           paddingBottom: "env(safe-area-inset-bottom)",
           touchAction: "none",
+          display: "flex",
         }}
       >
         <button
-          className={`status-icon-btn btn-pending ${activeStatus === "PENDING" ? "active active-pending" : ""}`}
-          onClick={() => handleStatusClick("PENDING")}
-          disabled={isResolved || isPendingVerification}
-          style={
-            isResolved || isPendingVerification
-              ? { opacity: 0.5, cursor: "not-allowed" }
-              : {}
-          }
-        >
-          <Clock size={28} className="status-icon" />
-          <span>{t.pending}</span>
-        </button>
-        <button
-          className={`status-icon-btn btn-inprogress ${activeStatus === "IN PROGRESS" ? "active active-inprogress" : ""}`}
-          onClick={() => handleStatusClick("IN PROGRESS")}
-          disabled={isResolved || isPendingVerification}
-          style={
-            isResolved || isPendingVerification
-              ? { opacity: 0.5, cursor: "not-allowed" }
-              : {}
-          }
-        >
-          <Wrench size={28} className="status-icon" />
-          <span>{t.inProgress}</span>
-        </button>
-        <button
-          className={`status-icon-btn btn-resolved ${activeStatus === "PENDING VERIFICATION" || activeStatus === "RESOLVED" ? "active active-resolved" : ""}`}
-          onClick={() => handleStatusClick("PENDING VERIFICATION")}
-          disabled={isResolved || isPendingVerification}
-          style={
-            isResolved || isPendingVerification
-              ? { opacity: 0.5, cursor: "not-allowed" }
-              : {}
-          }
+          className={`status-icon-btn btn-resolved ${
+            isLocked ? "active active-resolved" : ""
+          }`}
+          onClick={handleVerifyClick}
+          disabled={isLocked}
+          style={{
+            flex: 1,
+            display: "flex",
+            justifyContent: "center",
+            gap: "8px",
+            ...(isLocked ? { opacity: 0.5, cursor: "not-allowed" } : {}),
+          }}
         >
           <CheckCircle size={28} className="status-icon" />
-          <span>Verify</span>
+          <span style={{ fontSize: "1.05rem" }}>Submit for Verification</span>
         </button>
       </div>
     </div>

@@ -9,6 +9,8 @@ import {
   CheckCircle,
   MapPin,
   Navigation,
+  Check,
+  Users, // <-- Added Users icon
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -25,6 +27,8 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const [showMap, setShowMap] = useState(false);
 
   const [linemanLocation, setLinemanLocation] = useState(null);
+  const [timelineData, setTimelineData] = useState(null);
+  const [assignedLinemen, setAssignedLinemen] = useState([]); // <-- NEW: State for assigned personnel
 
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -32,15 +36,52 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const linemanMarkerRef = useRef(null);
   const lineRef = useRef(null);
 
-  const isPending = report.report_statuses?.name?.toUpperCase() === "PENDING";
-  const isInProgress =
-    report.report_statuses?.name?.toUpperCase() === "IN PROGRESS";
+  // Status checks
+  const statusName = report.report_statuses?.name?.toUpperCase() || "PENDING";
+  const isPending = statusName === "PENDING";
+  const isInProgress = statusName === "IN PROGRESS";
+
+  const showMapButton = isPending || isInProgress;
 
   const [formData, setFormData] = useState({
     report_type_id: report.report_type_id || "",
     landmark: report.landmark || "",
     description: report.description || "",
   });
+
+  // 1. Fetch Timeline Data AND Assigned Personnel from Assignments Table
+  useEffect(() => {
+    const fetchAssignmentDetails = async () => {
+      const { data, error } = await supabase
+        .from("assignments")
+        .select(
+          `
+          assigned_at, 
+          inprogress_at, 
+          completion_at, 
+          verified_at,
+          users ( first_name, last_name )
+        `,
+        )
+        .eq("report_id", report.id);
+
+      if (data && !error && data.length > 0) {
+        // Use the first record for timeline dates
+        setTimelineData(data[0]);
+
+        // Extract all assigned linemen names
+        const linemenNames = data
+          .map((a) =>
+            `${a.users?.first_name || ""} ${a.users?.last_name || ""}`.trim(),
+          )
+          .filter(Boolean);
+
+        // Remove duplicates just in case
+        setAssignedLinemen([...new Set(linemenNames)]);
+      }
+    };
+    fetchAssignmentDetails();
+  }, [report.id]);
 
   useEffect(() => {
     if (isPending) {
@@ -159,9 +200,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
     }, 100);
   }, [showMap, report.latitude, report.longitude]);
 
-  // =========================================================================
-  // 🚀 DYNAMIC LINEMAN MARKER & OSRM ROAD ROUTING
-  // =========================================================================
   useEffect(() => {
     if (!showMap || !linemanLocation || !report.latitude || !report.longitude)
       return;
@@ -181,7 +219,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
       const reportLat = parseFloat(report.latitude);
       const reportLon = parseFloat(report.longitude);
 
-      // 1. Draw or Update Lineman Marker
       const linemanIcon = L.divIcon({
         className: "live-tracker-icon",
         html: `<div style="background-color: #10b981; width: 26px; height: 26px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 0 15px rgba(16, 185, 129, 0.8); display: flex; align-items: center; justify-content: center; font-size: 14px; animation: pulse-ring 2s infinite;">⚡</div>`,
@@ -198,41 +235,35 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
         linemanMarkerRef.current.setLatLng([linemanLat, linemanLon]);
       }
 
-      // 2. Fetch OSRM Road Routing Data
       try {
-        // OSRM requires coordinates in [Longitude, Latitude] format for the URL
         const response = await fetch(
           `https://router.project-osrm.org/route/v1/driving/${linemanLon},${linemanLat};${reportLon},${reportLat}?overview=full&geometries=geojson`,
         );
         const data = await response.json();
 
-        if (!isDrawing) return; // Stop if the user closed the map while it was fetching
+        if (!isDrawing) return;
 
         let routePoints = [];
 
         if (data.routes && data.routes[0]) {
-          // OSRM returns [Lon, Lat], but Leaflet needs [Lat, Lon]
           routePoints = data.routes[0].geometry.coordinates.map((coord) => [
             coord[1],
             coord[0],
           ]);
         } else {
-          // Fallback to straight line if API fails to find a road
           routePoints = [
             [linemanLat, linemanLon],
             [reportLat, reportLon],
           ];
         }
 
-        // 3. Draw or Update Navy Blue Direction Line
         if (!lineRef.current) {
           lineRef.current = L.polyline(routePoints, {
-            color: "#1b0b8c", // Navy Blue
+            color: "#1b0b8c",
             weight: 5,
             opacity: 0.8,
           }).addTo(mapRef.current);
 
-          // Auto-zoom to fit the whole route on screen
           mapRef.current.fitBounds(lineRef.current.getBounds(), {
             padding: [50, 50],
             maxZoom: 18,
@@ -244,7 +275,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
         console.error("Routing failed, falling back to straight line:", error);
         if (!isDrawing) return;
 
-        // Safety Fallback (Straight Line) if there's no internet or API issue
         const fallbackPoints = [
           [linemanLat, linemanLon],
           [reportLat, reportLon],
@@ -323,9 +353,60 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
     }
   };
 
+  const formatTimelineDate = (isoString) => {
+    if (!isoString) return { date: "--", time: "" };
+    const d = new Date(isoString);
+    return {
+      date: d.toLocaleDateString("en-US", { day: "2-digit", month: "short" }),
+      time: d.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }),
+    };
+  };
+
+  let currentStep = 1;
+  if (statusName === "IN PROGRESS") currentStep = 2;
+  if (statusName === "PENDING VERIFICATION") currentStep = 3;
+  if (["RESOLVED", "APPROVED", "ADMIN VERIFIED"].includes(statusName))
+    currentStep = 4;
+
+  const timelineSteps = [
+    { label: "Pending", ...formatTimelineDate(report.created_at) },
+    {
+      label: "In Progress",
+      ...formatTimelineDate(
+        timelineData?.inprogress_at || timelineData?.assigned_at,
+      ),
+    },
+    {
+      label: "Pending Verif.",
+      ...formatTimelineDate(timelineData?.completion_at),
+    },
+    {
+      label: "Resolved",
+      ...formatTimelineDate(
+        timelineData?.verified_at ||
+          (currentStep === 4 ? report.updated_at : null),
+      ),
+    },
+  ];
+
   const currentReportTypeName =
     reportTypes.find((type) => type.id === parseInt(formData.report_type_id))
       ?.name || report.report_types?.name;
+
+  let badgeStyle = {};
+  if (statusName === "IN PROGRESS") {
+    badgeStyle = { backgroundColor: "#bae6fd", color: "#0284c7" };
+  } else if (statusName === "ADMIN VERIFIED") {
+    badgeStyle = { backgroundColor: "#e0e7ff", color: "#4f46e5" };
+  } else if (statusName === "PENDING VERIFICATION") {
+    badgeStyle = { backgroundColor: "#ffedd5", color: "#c2410c" };
+  } else if (statusName === "REJECTED") {
+    badgeStyle = { backgroundColor: "#fee2e2", color: "#dc2626" };
+  }
 
   if (showMap) {
     return (
@@ -531,43 +612,237 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           </div>
         )}
 
-        <button
-          onClick={() => setShowMap(true)}
-          style={{
-            width: "100%",
-            padding: "16px",
-            backgroundColor: "#1b0b8c",
-            color: "#ffffff",
-            border: "none",
-            borderRadius: "50px",
-            fontWeight: "900",
-            fontSize: "1rem",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: "10px",
-            cursor: "pointer",
-            boxShadow: "0 6px 15px rgba(27, 11, 140, 0.2)",
-            transition: "transform 0.1s",
-            marginBottom: "20px",
-          }}
-        >
-          <MapPin size={22} />
-          {t.viewLocationMap}
-        </button>
+        {showMapButton && (
+          <button
+            onClick={() => setShowMap(true)}
+            style={{
+              width: "100%",
+              padding: "16px",
+              backgroundColor: "#1b0b8c",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "50px",
+              fontWeight: "900",
+              fontSize: "1rem",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "10px",
+              cursor: "pointer",
+              boxShadow: "0 6px 15px rgba(27, 11, 140, 0.2)",
+              transition: "transform 0.1s",
+              marginBottom: "20px",
+            }}
+          >
+            <MapPin size={22} />
+            {t.viewLocationMap}
+          </button>
+        )}
+
+        {/* NEW: ASSIGNED PERSONNEL UI */}
+        {assignedLinemen.length > 0 && (
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: "16px",
+              padding: "20px 15px",
+              marginBottom: "20px",
+              boxShadow: "0 4px 10px rgba(0,0,0,0.04)",
+              border: "1px solid #f1f5f9",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                marginBottom: "12px",
+              }}
+            >
+              <Users size={20} color="#1b0b8c" />
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: "1rem",
+                  color: "#1e293b",
+                  fontWeight: "900",
+                }}
+              >
+                Assigned Personnel
+              </h3>
+            </div>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: "15px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px",
+                listStyleType: "square",
+                color: "#1b0b8c",
+              }}
+            >
+              {assignedLinemen.map((name, idx) => (
+                <li
+                  key={idx}
+                  style={{
+                    fontSize: "0.9rem",
+                    color: "#475569",
+                    fontWeight: "700",
+                  }}
+                >
+                  {name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* HORIZONTAL PROGRESS TIMELINE UI */}
+        {statusName !== "REJECTED" && (
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: "16px",
+              padding: "20px 10px",
+              marginBottom: "20px",
+              boxShadow: "0 4px 10px rgba(0,0,0,0.04)",
+            }}
+          >
+            <h3
+              style={{
+                margin: "0 0 20px 15px",
+                fontSize: "1rem",
+                color: "#1e293b",
+                fontWeight: "900",
+              }}
+            >
+              Report Progress
+            </h3>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                position: "relative",
+              }}
+            >
+              {/* Background Grey Track */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "11px",
+                  left: "12.5%",
+                  right: "12.5%",
+                  height: "4px",
+                  backgroundColor: "#ccfbf1",
+                  zIndex: 0,
+                  borderRadius: "2px",
+                }}
+              ></div>
+
+              {/* Active Teal Track */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "11px",
+                  left: "12.5%",
+                  width: `${(Math.max(1, currentStep) - 1) * 25}%`,
+                  height: "4px",
+                  backgroundColor: "#14b8a6",
+                  zIndex: 1,
+                  borderRadius: "2px",
+                  transition: "width 0.5s ease",
+                }}
+              ></div>
+
+              {timelineSteps.map((step, index) => {
+                const stepNumber = index + 1;
+                const isCompleted = currentStep >= stepNumber;
+                const isCurrent = currentStep === stepNumber;
+
+                return (
+                  <div
+                    key={step.label}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      zIndex: 2,
+                      flex: 1,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: isCurrent ? "26px" : "16px",
+                        height: isCurrent ? "26px" : "16px",
+                        borderRadius: "50%",
+                        backgroundColor: isCompleted ? "#14b8a6" : "#ccfbf1",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginBottom: isCurrent ? "6px" : "11px",
+                        marginTop: isCurrent ? "0px" : "5px",
+                        transition: "all 0.3s ease",
+                        boxShadow: isCurrent
+                          ? "0 0 0 4px rgba(20, 184, 166, 0.2)"
+                          : "none",
+                      }}
+                    >
+                      {isCurrent && (
+                        <Check size={16} color="#ffffff" strokeWidth={4} />
+                      )}
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: "0.65rem",
+                        fontWeight: isCompleted ? "800" : "600",
+                        color: isCompleted ? "#0f766e" : "#94a3b8",
+                        textAlign: "center",
+                        lineHeight: "1.1",
+                        marginBottom: "4px",
+                        height: "18px",
+                        padding: "0 2px",
+                      }}
+                    >
+                      {step.label}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.55rem",
+                        color: "#64748b",
+                        textAlign: "center",
+                        fontWeight: "700",
+                      }}
+                    >
+                      {step.date !== "--" ? step.date : ""}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.5rem",
+                        color: "#94a3b8",
+                        textAlign: "center",
+                      }}
+                    >
+                      {step.time}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="detail-info-section rrd-info-section">
           <div className="rrd-status-row">
             <h3 className="rrd-status-label">{t.statusLabel}</h3>
             <span
-              className={`rrd-status-badge ${isPending ? "rrd-status-pending" : isInProgress ? "rrd-status-inprogress" : "rrd-status-resolved"}`}
-              style={
-                isInProgress
-                  ? { backgroundColor: "#bae6fd", color: "#0284c7" }
-                  : {}
-              }
+              className={`rrd-status-badge ${isPending ? "rrd-status-pending" : "rrd-status-resolved"}`}
+              style={badgeStyle}
             >
-              {report.report_statuses?.name?.toUpperCase()}
+              {statusName}
             </span>
           </div>
 
@@ -626,7 +901,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
             </div>
           ) : (
             <div className="rrd-view-wrapper">
-              {!isPending && !isInProgress && (
+              {!isPending && !isInProgress && statusName !== "REJECTED" && (
                 <p
                   className="rrd-processing-msg"
                   style={{

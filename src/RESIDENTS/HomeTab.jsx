@@ -54,7 +54,8 @@ function HomeTab() {
         const unratedReport = reportsData.find(
           (r) =>
             (r.report_statuses?.name?.toUpperCase() === "RESOLVED" ||
-              r.report_statuses?.name?.toUpperCase() === "APPROVED") &&
+              r.report_statuses?.name?.toUpperCase() === "APPROVED" ||
+              r.report_statuses?.name?.toUpperCase() === "ADMIN VERIFIED") &&
             (!r.report_ratings || r.report_ratings.length === 0),
         );
 
@@ -69,46 +70,102 @@ function HomeTab() {
     }
   };
 
-  const getStatusColor = (statusName) => {
-    const status = statusName?.toUpperCase() || "PENDING";
-    if (status === "RESOLVED" || status === "APPROVED") return "#16a34a";
-    if (status === "IN PROGRESS") return "#0ea5e9";
-    if (status === "REJECTED") return "#dc2626";
-    return "#facc15";
-  };
-
   const getTextColor = (statusName) => {
     const status = statusName?.toUpperCase() || "PENDING";
-    if (status === "RESOLVED" || status === "APPROVED") return "#16a34a";
-    if (status === "IN PROGRESS") return "#0ea5e9";
+    if (
+      status === "RESOLVED" ||
+      status === "APPROVED" ||
+      status === "ADMIN VERIFIED"
+    )
+      return "#16a34a";
+    if (status === "IN PROGRESS" || status === "PENDING VERIFICATION")
+      return "#0ea5e9";
     if (status === "REJECTED") return "#dc2626";
     return "#ca8a04";
   };
 
-  const pendingCount = userReports.filter(
-    (r) => r.report_statuses?.name?.toUpperCase() === "PENDING",
-  ).length;
+  // Maps internal database statuses to simplified resident UI text
+  const getDisplayStatus = (statusName) => {
+    const status = statusName?.toUpperCase() || "PENDING";
+    if (status === "ADMIN VERIFIED" || status === "APPROVED") return "RESOLVED";
+    if (status === "PENDING VERIFICATION") return "IN PROGRESS";
+    return status;
+  };
 
-  const inProgressCount = userReports.filter(
-    (r) => r.report_statuses?.name?.toUpperCase() === "IN PROGRESS",
-  ).length;
+  // NEW: Determines priority level and colors based on the report type
+  const getPriority = (typeName) => {
+    const name = typeName?.toUpperCase() || "";
+    if (
+      name.includes("POLE") ||
+      name.includes("LINE") ||
+      name.includes("TRANSFORMER") ||
+      name.includes("WIRE") ||
+      name.includes("SPARK")
+    ) {
+      return { text: "HIGH PRIORITY", color: "#ea580c" }; // Orange for dangerous issues
+    }
+    return { text: "STANDARD PRIORITY", color: "#0284c7" }; // Blue for standard issues
+  };
 
-  const resolvedCount = userReports.filter(
-    (r) =>
-      r.report_statuses?.name?.toUpperCase() === "RESOLVED" ||
-      r.report_statuses?.name?.toUpperCase() === "APPROVED",
-  ).length;
+  // NEW: Soft tinted badge styling for the new clean card UI
+  const getBadgeStyle = (statusName) => {
+    const status = statusName?.toUpperCase() || "PENDING";
+    if (
+      status === "RESOLVED" ||
+      status === "APPROVED" ||
+      status === "ADMIN VERIFIED"
+    ) {
+      return { bg: "#f0fdf4", border: "#bbf7d0", text: "#16a34a" }; // Green
+    }
+    if (status === "IN PROGRESS" || status === "PENDING VERIFICATION") {
+      return { bg: "#f0f9ff", border: "#bae6fd", text: "#0284c7" }; // Blue
+    }
+    if (status === "REJECTED") {
+      return { bg: "#fef2f2", border: "#fecaca", text: "#dc2626" }; // Red
+    }
+    return { bg: "#fffbeb", border: "#fef08a", text: "#ca8a04" }; // Yellow (Pending)
+  };
 
-  const rejectedCount = userReports.filter(
-    (r) => r.report_statuses?.name?.toUpperCase() === "REJECTED",
-  ).length;
+  const pendingCount = userReports.filter((r) => {
+    const s = r.report_statuses?.name?.toUpperCase();
+    return s === "PENDING";
+  }).length;
+
+  const inProgressCount = userReports.filter((r) => {
+    const s = r.report_statuses?.name?.toUpperCase();
+    return s === "IN PROGRESS" || s === "PENDING VERIFICATION";
+  }).length;
+
+  const resolvedCount = userReports.filter((r) => {
+    const s = r.report_statuses?.name?.toUpperCase();
+    return s === "RESOLVED" || s === "APPROVED" || s === "ADMIN VERIFIED";
+  }).length;
+
+  const rejectedCount = userReports.filter((r) => {
+    const s = r.report_statuses?.name?.toUpperCase();
+    return s === "REJECTED";
+  }).length;
 
   const filteredReports = userReports.filter((report) => {
     if (filterStatus === "ALL") return true;
 
     const status = report.report_statuses?.name?.toUpperCase() || "PENDING";
+
+    if (filterStatus === "PENDING") {
+      return status === "PENDING";
+    }
+    if (filterStatus === "IN PROGRESS") {
+      return status === "IN PROGRESS" || status === "PENDING VERIFICATION";
+    }
     if (filterStatus === "RESOLVED") {
-      return status === "RESOLVED" || status === "APPROVED";
+      return (
+        status === "RESOLVED" ||
+        status === "APPROVED" ||
+        status === "ADMIN VERIFIED"
+      );
+    }
+    if (filterStatus === "REJECTED") {
+      return status === "REJECTED";
     }
     return status === filterStatus;
   });
@@ -484,46 +541,76 @@ function HomeTab() {
                   key={report.id}
                   onClick={() => setSelectedReport(report)}
                   style={{
-                    backgroundColor: "#1b0b8c",
-                    borderRadius: "20px",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "16px",
                     display: "flex",
                     justifyContent: "space-between",
-                    alignItems: "stretch",
-                    padding: "8px",
+                    alignItems: "center",
+                    padding: "16px",
                     cursor: "pointer",
-                    boxShadow: "0 8px 15px rgba(27, 11, 140, 0.15)",
+                    boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+                    position: "relative",
+                    overflow: "hidden",
+                    border: "1px solid #f1f5f9",
                   }}
                 >
+                  {/* Left Accent Border dynamically colored by priority */}
                   <div
                     style={{
-                      padding: "12px 15px 12px 15px",
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: "6px",
+                      backgroundColor: getPriority(report.report_types?.name)
+                        .color,
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      paddingLeft: "6px",
                       display: "flex",
                       flexDirection: "column",
                       justifyContent: "center",
                       flex: 1,
+                      paddingRight: "12px",
                     }}
                   >
-                    <h3
+                    <span
                       style={{
-                        margin: "0 0 5px 0",
-                        color: "#ffffff",
-                        fontSize: "1.1rem",
+                        color: getPriority(report.report_types?.name).color,
+                        fontSize: "0.65rem",
                         fontWeight: "900",
                         letterSpacing: "0.5px",
+                        textTransform: "uppercase",
+                        marginBottom: "4px",
                       }}
                     >
-                      {report.report_types?.name?.toUpperCase() ||
-                        "UNKNOWN ISSUE"}
+                      {getPriority(report.report_types?.name).text}
+                    </span>
+                    <h3
+                      style={{
+                        margin: "0 0 4px 0",
+                        color: "#1b0b8c",
+                        fontSize: "1.05rem",
+                        fontWeight: "900",
+                        letterSpacing: "0.2px",
+                        lineHeight: "1.2",
+                      }}
+                    >
+                      {report.report_types?.name || "UNKNOWN ISSUE"}
                     </h3>
                     <p
                       style={{
                         margin: 0,
-                        color: "#cbd5e1",
-                        fontSize: "0.85rem",
+                        color: "#64748b",
+                        fontSize: "0.8rem",
                         display: "-webkit-box",
-                        WebkitLineClamp: 1,
+                        WebkitLineClamp: 2,
                         WebkitBoxOrient: "vertical",
                         overflow: "hidden",
+                        lineHeight: "1.4",
                       }}
                     >
                       {report.landmark || "No landmark"}
@@ -532,24 +619,28 @@ function HomeTab() {
 
                   <div
                     style={{
-                      backgroundColor: "#ffffff",
-                      borderRadius: "15px",
-                      padding: "0 20px",
+                      backgroundColor: getBadgeStyle(
+                        report.report_statuses?.name,
+                      ).bg,
+                      border: `1px solid ${getBadgeStyle(report.report_statuses?.name).border}`,
+                      borderRadius: "20px",
+                      padding: "6px 12px",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      minWidth: "100px",
+                      flexShrink: 0,
                     }}
                   >
                     <span
                       style={{
-                        color: getTextColor(report.report_statuses?.name),
+                        color: getBadgeStyle(report.report_statuses?.name).text,
                         fontWeight: "900",
-                        fontSize: "0.85rem",
+                        fontSize: "0.7rem",
                         letterSpacing: "0.5px",
+                        textTransform: "uppercase",
                       }}
                     >
-                      {report.report_statuses?.name?.toUpperCase() || "PENDING"}
+                      {getDisplayStatus(report.report_statuses?.name)}
                     </span>
                   </div>
                 </div>

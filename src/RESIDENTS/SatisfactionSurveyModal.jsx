@@ -17,7 +17,6 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
     setError("");
 
     try {
-      // 🚀 UPDATED: Inserts into the new report_ratings table instead of updating reports!
       const { error: dbError } = await supabase.from("report_ratings").insert([
         {
           report_id: report.id,

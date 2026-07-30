@@ -5,6 +5,11 @@ import LoadingScreen from "../components/LoadingScreen";
 import { Zap } from "lucide-react";
 import "../Resident.css";
 
+/**
+ * Main component for the Advisory Tab.
+ * It displays a list of upcoming power outage schedules grouped by date and time.
+ * @returns {JSX.Element} The rendered user interface for the advisory screen.
+ */
 function AdvisoryTab() {
   const [advisories, setAdvisories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,6 +21,12 @@ function AdvisoryTab() {
     fetchAdvisories();
   }, []);
 
+  /**
+   * Retrieves power advisory records from the database.
+   * It filters out old schedules so the app only shows current or future power outages.
+   * @async
+   * @returns {Promise<void>} Updates the state with the list of advisories.
+   */
   const fetchAdvisories = async () => {
     try {
       setLoading(true);
@@ -37,6 +48,11 @@ function AdvisoryTab() {
     }
   };
 
+  /**
+   * Changes a full date string into a short, readable time format (example: 1:30pm).
+   * @param {string} dateString - The raw date and time string from the database.
+   * @returns {string} The formatted time in basic English format.
+   */
   const formatTime = (dateString) => {
     if (!dateString) return "";
     const date = new Date(dateString);
@@ -50,6 +66,11 @@ function AdvisoryTab() {
       .replace(" ", "");
   };
 
+  /**
+   * Groups the list of advisories by their scheduled date and time.
+   * This makes sure that areas experiencing an outage at the exact same time are shown together.
+   * @type {Object.<string, Array>} An object where the key is the date/time and the value is an array of advisories.
+   */
   const groupedAdvisories = advisories.reduce((acc, current) => {
     const dateStr = new Date(current.schedule_start)
       .toLocaleDateString("en-US", {

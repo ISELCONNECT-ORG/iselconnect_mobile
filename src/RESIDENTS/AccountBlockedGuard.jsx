@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../supabaseClient"; // <-- Changed from "../../" to "../"
+import { supabase } from "../supabaseClient";
 import { ShieldAlert, MapPin, Calendar, MessageSquare } from "lucide-react";
-import LoadingScreen from "../components/LoadingScreen"; // <-- Fixed this path too just in case!
+import LoadingScreen from "../components/LoadingScreen";
 
 function AccountBlockedGuard({ children }) {
   const [loading, setLoading] = useState(true);
@@ -76,7 +76,6 @@ function AccountBlockedGuard({ children }) {
           alignItems: "center",
           boxSizing: "border-box",
           overscrollBehavior: "none",
-          // NEW: Fixed position overrides to remove rounded corners completely
           position: "fixed",
           top: 0,
           left: 0,

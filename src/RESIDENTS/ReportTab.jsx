@@ -11,8 +11,8 @@ import {
   AlertTriangle,
   Clock,
   ShieldAlert,
-  MapPin, // NEW
-  CheckCircle, // NEW
+  MapPin,
+  CheckCircle,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -152,8 +152,6 @@ function ReportTab({ isActive }) {
   const t = translations[currentLang];
 
   const [verificationStatus, setVerificationStatus] = useState("loading");
-
-  // NEW: State to track if they accepted the guidelines
   const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(false);
 
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -181,7 +179,6 @@ function ReportTab({ isActive }) {
   const mapRef = useRef(null);
   const markerRef = useRef(null);
 
-  // NEW: Reset guidelines when the user switches tabs so they have to agree every time they come back to report
   useEffect(() => {
     if (!isActive) {
       setHasAcceptedGuidelines(false);
@@ -427,7 +424,32 @@ function ReportTab({ isActive }) {
       const selectedMunicipality = municipalities.find(
         (m) => m.id.toString() === formData.municipality_id.toString(),
       );
-      const automaticBranchId = selectedMunicipality?.branch_id || null;
+
+      // --- DYNAMIC TIME-BASED ROUTING (Locked to Philippine Time UTC+8) ---
+      const now = new Date();
+
+      // Forces calculation into Philippine Time regardless of user's device/emulator timezone
+      let phHour = now.getUTCHours() + 8;
+      if (phHour >= 24) phHour -= 24;
+      const phMinute = now.getUTCMinutes();
+
+      const timeInMinutes = phHour * 60 + phMinute;
+
+      const startWorkingMinutes = 8 * 60; // 8:00 AM = 480
+      const endWorkingMinutes = 17 * 60; // 5:00 PM = 1020
+
+      let automaticBranchId = null;
+
+      if (
+        timeInMinutes >= startWorkingMinutes &&
+        timeInMinutes <= endWorkingMinutes
+      ) {
+        // Between 8:00 AM and 5:00 PM PHT -> Assign to local Branch Admin
+        automaticBranchId = selectedMunicipality?.branch_id || null;
+      } else {
+        // Between 5:01 PM and 7:59 AM PHT -> Leave null for Super Admin
+        automaticBranchId = null;
+      }
 
       const fileName = `${user.id}-${Date.now()}.jpg`;
       const imageBlob = base64ToBlob(imagePreview);
@@ -451,8 +473,8 @@ function ReportTab({ isActive }) {
           municipality_id: parseInt(formData.municipality_id),
           barangay_id: parseInt(formData.barangay_id),
           purok_sitio: formData.purok_sitio.trim() || null,
-          branch_id: automaticBranchId,
-          status_id: 1,
+          branch_id: automaticBranchId, // Successfully routed!
+          status_id: 1, // PENDING
           photo_url: publicUrlData.publicUrl,
         },
       ]);
@@ -686,7 +708,7 @@ function ReportTab({ isActive }) {
                   setShowSuccessModal(false);
                   setImagePreview(null);
                   setCoordinates({ lat: "", lon: "" });
-                  setHasAcceptedGuidelines(false); // Resets guidelines after successful report
+                  setHasAcceptedGuidelines(false);
                   setFormData({
                     report_type_id: "",
                     municipality_id: "",
@@ -704,7 +726,6 @@ function ReportTab({ isActive }) {
           document.body,
         )}
 
-      {/* NEW: GUIDELINES VIEW */}
       {!hasAcceptedGuidelines ? (
         <div
           style={{

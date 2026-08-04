@@ -147,7 +147,7 @@ const SearchableDropdown = ({
   );
 };
 
-function ReportTab({ isActive }) {
+function ReportTab({ isActive, onNavigateHome }) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
   const t = translations[currentLang];
 
@@ -428,7 +428,6 @@ function ReportTab({ isActive }) {
       // --- DYNAMIC TIME-BASED ROUTING (Locked to Philippine Time UTC+8) ---
       const now = new Date();
 
-      // Forces calculation into Philippine Time regardless of user's device/emulator timezone
       let phHour = now.getUTCHours() + 8;
       if (phHour >= 24) phHour -= 24;
       const phMinute = now.getUTCMinutes();
@@ -444,10 +443,8 @@ function ReportTab({ isActive }) {
         timeInMinutes >= startWorkingMinutes &&
         timeInMinutes <= endWorkingMinutes
       ) {
-        // Between 8:00 AM and 5:00 PM PHT -> Assign to local Branch Admin
         automaticBranchId = selectedMunicipality?.branch_id || null;
       } else {
-        // Between 5:01 PM and 7:59 AM PHT -> Leave null for Super Admin
         automaticBranchId = null;
       }
 
@@ -473,8 +470,8 @@ function ReportTab({ isActive }) {
           municipality_id: parseInt(formData.municipality_id),
           barangay_id: parseInt(formData.barangay_id),
           purok_sitio: formData.purok_sitio.trim() || null,
-          branch_id: automaticBranchId, // Successfully routed!
-          status_id: 1, // PENDING
+          branch_id: automaticBranchId,
+          status_id: 1,
           photo_url: publicUrlData.publicUrl,
         },
       ]);
@@ -492,6 +489,8 @@ function ReportTab({ isActive }) {
         "SUBMIT_REPORT",
         `Resident submitted a new ${typeName} report at ${formData.landmark.trim()}.`,
       );
+
+      // Trigger the success modal
       setShowSuccessModal(true);
     } catch (err) {
       setError(err.message);
@@ -499,47 +498,6 @@ function ReportTab({ isActive }) {
       setIsSubmitting(false);
     }
   };
-
-  useEffect(() => {
-    if (
-      !isActive ||
-      !coordinates.lat ||
-      !coordinates.lon ||
-      coordinates.lat === "Fetching..."
-    ) {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-      return;
-    }
-    const lat = parseFloat(coordinates.lat);
-    const lon = parseFloat(coordinates.lon);
-    setTimeout(() => {
-      if (!mapContainerRef.current) return;
-      const customIcon = L.divIcon({
-        className: "custom-leaflet-marker",
-        html: `<div style="background-color: #facc15; width: 22px; height: 22px; border-radius: 50%; border: 4px solid #1b0b8c; box-shadow: 0 4px 8px rgba(0,0,0,0.4);"></div>`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11],
-      });
-      if (!mapRef.current) {
-        mapRef.current = L.map(mapContainerRef.current, {
-          zoomControl: false,
-        }).setView([lat, lon], 16);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "&copy; OpenStreetMap contributors",
-          maxZoom: 19,
-        }).addTo(mapRef.current);
-      } else {
-        mapRef.current.setView([lat, lon], 16);
-      }
-      if (markerRef.current) markerRef.current.remove();
-      markerRef.current = L.marker([lat, lon], { icon: customIcon }).addTo(
-        mapRef.current,
-      );
-    }, 100);
-  }, [coordinates, isActive]);
 
   if (verificationStatus === "loading") {
     return (
@@ -717,6 +675,15 @@ function ReportTab({ isActive }) {
                     landmark: "",
                     description: "",
                   });
+
+                  // Go back to the Home tab after confirming the success message
+                  if (typeof onNavigateHome === "function") {
+                    onNavigateHome();
+                  } else {
+                    window.dispatchEvent(
+                      new CustomEvent("switchTab", { detail: "Home" }),
+                    );
+                  }
                 }}
               >
                 OK!
@@ -926,14 +893,6 @@ function ReportTab({ isActive }) {
               </div>
             )}
           </div>
-
-          {coordinates.lat && coordinates.lat !== "Fetching..." && (
-            <div
-              ref={mapContainerRef}
-              className="map-preview-box report-map-mb"
-              style={{ zIndex: 1 }}
-            />
-          )}
 
           <div
             style={{

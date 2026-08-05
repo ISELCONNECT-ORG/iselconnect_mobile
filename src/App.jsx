@@ -4,28 +4,59 @@ import LoadingScreen from "./components/LoadingScreen";
 import Auth from "./LoginSignup/Auth";
 import ResidentDashboard from "./RESIDENTS/ResidentDashboard";
 import LinemanDashboard from "./LINEMAN/LinemanDashboard";
-import { useActiveStatus } from "./hooks/useActiveStatus"; // <-- NEW IMPORT
+import { useActiveStatus } from "./hooks/useActiveStatus";
+import { Network } from "@capacitor/network";
+import { WifiOff } from "lucide-react";
 
 function App() {
-  // 🟢 THIS SINGLE LINE ACTIVATES THE GLOBAL BACKGROUND TRACKER
+  // Global Background Tracker
   useActiveStatus();
 
   const [session, setSession] = useState(null);
   const [userRole, setUserRole] = useState(null);
-
   const [appLoading, setAppLoading] = useState(true);
   const [roleFetching, setRoleFetching] = useState(false);
 
+  // NEW: Network Status State
+  const [isOnline, setIsOnline] = useState(true);
+
   const isDevRoute = window.location.pathname === "/dev-lineman-signup";
 
+  // --- NETWORK TRACKER EFFECT ---
   useEffect(() => {
-    // Helper function to check if we are in the middle of a password reset
+    // Check initial status when app opens
+    const checkNetworkStatus = async () => {
+      const status = await Network.getStatus();
+      setIsOnline(status.connected);
+    };
+    checkNetworkStatus();
+
+    // Listen for changes (e.g., user turns on Airplane Mode)
+    let networkListener;
+    const setupListener = async () => {
+      networkListener = await Network.addListener(
+        "networkStatusChange",
+        (status) => {
+          setIsOnline(status.connected);
+        },
+      );
+    };
+    setupListener();
+
+    return () => {
+      if (networkListener) {
+        networkListener.remove();
+      }
+    };
+  }, []);
+
+  // --- AUTHENTICATION EFFECT ---
+  useEffect(() => {
     const isRecovering = () =>
       localStorage.getItem("recovery_in_progress") === "true";
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      // Skip fetching role if they are just recovering their password
       if (session && !isRecovering()) {
         fetchUserRole(session.user.id);
       } else {
@@ -38,8 +69,6 @@ function App() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
 
-      // 🚀 THE FIX: If they are recovering their password, IGNORE the login event!
-      // This stops the Loading Screen from rendering and destroying the Forgot Password form.
       if (isRecovering()) {
         return;
       }
@@ -77,7 +106,6 @@ function App() {
           setRoleFetching(false);
           return;
         }
-
         console.log(
           `Profile row pending creation. Retrying... (${attempts - 1} left)`,
         );
@@ -95,63 +123,115 @@ function App() {
     setRoleFetching(false);
   };
 
-  if (appLoading || roleFetching) {
+  // --- ROUTING LOGIC ---
+  const renderContent = () => {
+    if (appLoading || roleFetching) {
+      return (
+        <div
+          style={{
+            height: "100vh",
+            width: "100vw",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "#f8fafc",
+          }}
+        >
+          <LoadingScreen message="LOADING ISELCONNECT..." />
+        </div>
+      );
+    }
+
+    if (isDevRoute) {
+      return <LinemanRegister onBack={() => (window.location.href = "/")} />;
+    }
+
+    const isRecoveringFlag =
+      localStorage.getItem("recovery_in_progress") === "true";
+
+    if (!session || isRecoveringFlag) {
+      return (
+        <Auth onBack={() => console.log("Already at root login screen")} />
+      );
+    }
+
+    if (session && userRole && !isRecoveringFlag) {
+      if (userRole === 7) return <ResidentDashboard />;
+      if (userRole === 9) return <LinemanDashboard />;
+    }
+
     return (
       <div
-        style={{
-          height: "100vh",
-          width: "100vw",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#f8fafc",
-        }}
+        className="app-restricted-screen"
+        style={{ textAlign: "center", padding: "50px" }}
       >
-        <LoadingScreen message="LOADING ISELCONNECT..." />
+        <h2>Access Restricted</h2>
+        <p>Your account role cannot access this mobile portal.</p>
+        <button
+          onClick={() => supabase.auth.signOut()}
+          className="app-signout-btn"
+          style={{
+            padding: "10px 20px",
+            backgroundColor: "#1b0b8c",
+            color: "white",
+            borderRadius: "8px",
+            border: "none",
+            marginTop: "20px",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          Sign Out
+        </button>
       </div>
     );
-  }
-
-  if (isDevRoute) {
-    return <LinemanRegister onBack={() => (window.location.href = "/")} />;
-  }
-
-  const isRecoveringFlag =
-    localStorage.getItem("recovery_in_progress") === "true";
-
-  if (!session || isRecoveringFlag) {
-    return <Auth onBack={() => console.log("Already at root login screen")} />;
-  }
-
-  if (session && userRole && !isRecoveringFlag) {
-    if (userRole === 7) return <ResidentDashboard />;
-    if (userRole === 9) return <LinemanDashboard />;
-  }
+  };
 
   return (
-    <div
-      className="app-restricted-screen"
-      style={{ textAlign: "center", padding: "50px" }}
-    >
-      <h2>Access Restricted</h2>
-      <p>Your account role cannot access this mobile portal.</p>
-      <button
-        onClick={() => supabase.auth.signOut()}
-        className="app-signout-btn"
-        style={{
-          padding: "10px 20px",
-          backgroundColor: "#1b0b8c",
-          color: "white",
-          borderRadius: "8px",
-          border: "none",
-          marginTop: "20px",
-          cursor: "pointer",
-          fontWeight: "bold",
-        }}
-      >
-        Sign Out
-      </button>
-    </div>
+    <>
+      {/* 🔴 OFFLINE OVERLAY - Sits on top of the app when disconnected */}
+      {!isOnline && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            backdropFilter: "blur(5px)",
+            WebkitBackdropFilter: "blur(5px)", // Safari support
+            zIndex: 999999, // Ensures it covers absolutely everything
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "20px",
+            textAlign: "center",
+            animation: "contentFade 0.3s ease-out",
+          }}
+        >
+          <WifiOff size={80} color="#ef4444" style={{ marginBottom: "20px" }} />
+          <h2
+            style={{
+              color: "#1e293b",
+              fontWeight: "900",
+              marginBottom: "10px",
+              fontSize: "1.8rem",
+            }}
+          >
+            No Internet Connection
+          </h2>
+          <p style={{ color: "#64748b", lineHeight: "1.6", maxWidth: "300px" }}>
+            ISELCONNECT requires an active internet connection to synchronize
+            reports. Please check your Wi-Fi or mobile data.
+          </p>
+        </div>
+      )}
+
+      {/* Main App Content */}
+      {renderContent()}
+    </>
   );
 }
 

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom"; // <-- Added this!
 import { supabase } from "../supabaseClient";
 import { User, Edit, Settings, Save, X } from "lucide-react";
 import SettingsTab from "./SettingsTab";
-import logo from "../assets/ISELCONNECT.png";
+import logo from "../assets/BG.png";
 import { logSystemAction } from "../utils/logger";
 import LoadingScreen from "../components/LoadingScreen";
 

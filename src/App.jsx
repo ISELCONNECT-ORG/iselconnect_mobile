@@ -4,8 +4,12 @@ import LoadingScreen from "./components/LoadingScreen";
 import Auth from "./LoginSignup/Auth";
 import ResidentDashboard from "./RESIDENTS/ResidentDashboard";
 import LinemanDashboard from "./LINEMAN/LinemanDashboard";
+import { useActiveStatus } from "./hooks/useActiveStatus"; // <-- NEW IMPORT
 
 function App() {
+  // 🟢 THIS SINGLE LINE ACTIVATES THE GLOBAL BACKGROUND TRACKER
+  useActiveStatus();
+
   const [session, setSession] = useState(null);
   const [userRole, setUserRole] = useState(null);
 

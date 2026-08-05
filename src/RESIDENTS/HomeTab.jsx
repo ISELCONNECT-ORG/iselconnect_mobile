@@ -40,10 +40,11 @@ function HomeTab() {
         setUserName(`${userData.first_name} ${userData.last_name}`);
       }
 
+      // ADDED: priority_level to the report_types selection
       const { data: reportsData, error: reportsError } = await supabase
         .from("reports")
         .select(
-          `id, landmark, description, remarks, photo_url, resolved_photo_url, created_at, report_type_id, latitude, longitude, report_types ( name ), report_statuses ( name ), report_ratings ( id )`,
+          `id, landmark, description, remarks, photo_url, resolved_photo_url, created_at, report_type_id, latitude, longitude, report_types ( name, priority_level ), report_statuses ( name ), report_ratings ( id )`,
         )
         .eq("residents_id", user.id)
         .order("created_at", { ascending: false });
@@ -84,7 +85,6 @@ function HomeTab() {
     return "#ca8a04";
   };
 
-  // Maps internal database statuses to simplified resident UI text
   const getDisplayStatus = (statusName) => {
     const status = statusName?.toUpperCase() || "PENDING";
     if (status === "ADMIN VERIFIED" || status === "APPROVED") return "RESOLVED";
@@ -92,22 +92,23 @@ function HomeTab() {
     return status;
   };
 
-  // NEW: Determines priority level and colors based on the report type
-  const getPriority = (typeName) => {
-    const name = typeName?.toUpperCase() || "";
-    if (
-      name.includes("POLE") ||
-      name.includes("LINE") ||
-      name.includes("TRANSFORMER") ||
-      name.includes("WIRE") ||
-      name.includes("SPARK")
-    ) {
-      return { text: "HIGH PRIORITY", color: "#ea580c" }; // Orange for dangerous issues
+  // UPDATED: Now maps directly to the actual database priorities
+  const getPriority = (priorityLevel) => {
+    const level = priorityLevel?.toUpperCase() || "NORMAL";
+    switch (level) {
+      case "CRITICAL":
+        return { text: "CRITICAL PRIORITY", color: "#ef4444" }; // Red
+      case "HIGH":
+        return { text: "HIGH PRIORITY", color: "#ea580c" }; // Orange
+      case "NORMAL":
+        return { text: "NORMAL PRIORITY", color: "#0284c7" }; // Blue
+      case "LOW":
+        return { text: "LOW PRIORITY", color: "#10b981" }; // Green
+      default:
+        return { text: "NORMAL PRIORITY", color: "#0284c7" }; // Fallback Blue
     }
-    return { text: "STANDARD PRIORITY", color: "#0284c7" }; // Blue for standard issues
   };
 
-  // NEW: Soft tinted badge styling for the new clean card UI
   const getBadgeStyle = (statusName) => {
     const status = statusName?.toUpperCase() || "PENDING";
     if (
@@ -115,15 +116,15 @@ function HomeTab() {
       status === "APPROVED" ||
       status === "ADMIN VERIFIED"
     ) {
-      return { bg: "#f0fdf4", border: "#bbf7d0", text: "#16a34a" }; // Green
+      return { bg: "#f0fdf4", border: "#bbf7d0", text: "#16a34a" };
     }
     if (status === "IN PROGRESS" || status === "PENDING VERIFICATION") {
-      return { bg: "#f0f9ff", border: "#bae6fd", text: "#0284c7" }; // Blue
+      return { bg: "#f0f9ff", border: "#bae6fd", text: "#0284c7" };
     }
     if (status === "REJECTED") {
-      return { bg: "#fef2f2", border: "#fecaca", text: "#dc2626" }; // Red
+      return { bg: "#fef2f2", border: "#fecaca", text: "#dc2626" };
     }
-    return { bg: "#fffbeb", border: "#fef08a", text: "#ca8a04" }; // Yellow (Pending)
+    return { bg: "#fffbeb", border: "#fef08a", text: "#ca8a04" };
   };
 
   const pendingCount = userReports.filter((r) => {
@@ -554,7 +555,6 @@ function HomeTab() {
                     border: "1px solid #f1f5f9",
                   }}
                 >
-                  {/* Left Accent Border dynamically colored by priority */}
                   <div
                     style={{
                       position: "absolute",
@@ -562,8 +562,9 @@ function HomeTab() {
                       top: 0,
                       bottom: 0,
                       width: "6px",
-                      backgroundColor: getPriority(report.report_types?.name)
-                        .color,
+                      backgroundColor: getPriority(
+                        report.report_types?.priority_level,
+                      ).color,
                     }}
                   />
 
@@ -579,7 +580,8 @@ function HomeTab() {
                   >
                     <span
                       style={{
-                        color: getPriority(report.report_types?.name).color,
+                        color: getPriority(report.report_types?.priority_level)
+                          .color,
                         fontSize: "0.65rem",
                         fontWeight: "900",
                         letterSpacing: "0.5px",
@@ -587,7 +589,7 @@ function HomeTab() {
                         marginBottom: "4px",
                       }}
                     >
-                      {getPriority(report.report_types?.name).text}
+                      {getPriority(report.report_types?.priority_level).text}
                     </span>
                     <h3
                       style={{

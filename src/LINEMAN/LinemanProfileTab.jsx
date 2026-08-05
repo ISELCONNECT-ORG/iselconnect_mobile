@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { Settings, User, Edit, Save, X } from "lucide-react";
 import LinemanSettingsTab from "./LinemanSettingsTab";
-import logo from "../assets/ISELCONNECT.png";
+import logo from "../assets/BG.png";
 import { logSystemAction } from "../utils/logger";
 import { translations } from "../components/translations";
 import "../Lineman.css";

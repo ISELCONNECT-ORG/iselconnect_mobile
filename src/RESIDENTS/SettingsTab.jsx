@@ -23,7 +23,6 @@ function SettingsTab({ onBack, onLogout }) {
       "UPDATE_SETTINGS",
       `Resident updated app settings (Language: ${language}).`,
     );
-    // Trigger our custom modal instead of the browser alert
     setShowSaveSuccess(true);
   };
 
@@ -55,9 +54,6 @@ function SettingsTab({ onBack, onLogout }) {
         boxSizing: "border-box",
       }}
     >
-      {/* =========================================================
-          CUSTOM SUCCESS MODAL
-          ========================================================= */}
       {showSaveSuccess && (
         <div className="modal-overlay">
           <div className="modal-box">

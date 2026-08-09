@@ -10,7 +10,8 @@ import {
   MapPin,
   Navigation,
   Check,
-  Users, // <-- Added Users icon
+  Users,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -28,7 +29,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
 
   const [linemanLocation, setLinemanLocation] = useState(null);
   const [timelineData, setTimelineData] = useState(null);
-  const [assignedLinemen, setAssignedLinemen] = useState([]); // <-- NEW: State for assigned personnel
+  const [assignedLinemen, setAssignedLinemen] = useState([]);
 
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -49,7 +50,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
     description: report.description || "",
   });
 
-  // 1. Fetch Timeline Data AND Assigned Personnel from Assignments Table
   useEffect(() => {
     const fetchAssignmentDetails = async () => {
       const { data, error } = await supabase
@@ -66,17 +66,14 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
         .eq("report_id", report.id);
 
       if (data && !error && data.length > 0) {
-        // Use the first record for timeline dates
         setTimelineData(data[0]);
 
-        // Extract all assigned linemen names
         const linemenNames = data
           .map((a) =>
             `${a.users?.first_name || ""} ${a.users?.last_name || ""}`.trim(),
           )
           .filter(Boolean);
 
-        // Remove duplicates just in case
         setAssignedLinemen([...new Set(linemenNames)]);
       }
     };
@@ -348,6 +345,34 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
       setShowSuccessModal(true);
     } catch (err) {
       alert("Failed to update report. Please try again.\n" + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteReport = async () => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this report? This action cannot be undone.",
+    );
+    if (!confirmDelete) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("reports")
+        .delete()
+        .eq("id", report.id);
+
+      if (error) throw error;
+
+      await logSystemAction(
+        "DELETE_REPORT",
+        `Resident deleted pending report #${report.id}.`,
+      );
+
+      if (onReportUpdated) onReportUpdated();
+    } catch (err) {
+      alert("Failed to delete report. Please try again.\n" + err.message);
     } finally {
       setLoading(false);
     }
@@ -639,7 +664,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           </button>
         )}
 
-        {/* NEW: ASSIGNED PERSONNEL UI */}
         {assignedLinemen.length > 0 && (
           <div
             style={{
@@ -698,7 +722,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           </div>
         )}
 
-        {/* HORIZONTAL PROGRESS TIMELINE UI */}
         {statusName !== "REJECTED" && (
           <div
             style={{
@@ -728,7 +751,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 position: "relative",
               }}
             >
-              {/* Background Grey Track */}
               <div
                 style={{
                   position: "absolute",
@@ -741,8 +763,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                   borderRadius: "2px",
                 }}
               ></div>
-
-              {/* Active Teal Track */}
               <div
                 style={{
                   position: "absolute",
@@ -947,11 +967,59 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                   {formData.description || t.noDescProvided}
                 </p>
               </div>
+
+              {/* Perfectly Balanced Buttons */}
               {isPending && (
-                <button onClick={handleEditClick} className="rrd-edit-btn">
-                  <Edit2 size={20} /> {t.editReportTitle}
-                </button>
+                <div
+                  style={{ display: "flex", gap: "10px", marginTop: "15px" }}
+                >
+                  <button
+                    onClick={handleEditClick}
+                    className="rrd-edit-btn"
+                    style={{
+                      flex: 1,
+                      margin: 0,
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: "6px",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    <Edit2 size={18} strokeWidth={2.5} />
+                    <span style={{ paddingTop: "2px" }}>
+                      {t.editReportTitle}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={handleDeleteReport}
+                    disabled={loading}
+                    className="rrd-edit-btn"
+                    style={{
+                      flex: 1,
+                      margin: 0,
+                      backgroundColor: "#fee2e2",
+                      color: "#dc2626",
+                      border: "2px solid #fecaca",
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: "6px",
+                      cursor: loading ? "not-allowed" : "pointer",
+                      opacity: loading ? 0.7 : 1,
+                      transition: "all 0.2s ease",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    <Trash2 size={18} strokeWidth={2.5} />
+                    <span style={{ paddingTop: "2px" }}>
+                      {loading ? "Deleting..." : "Delete"}
+                    </span>
+                  </button>
+                </div>
               )}
+
               {report.resolved_photo_url && (
                 <div className="rrd-evidence-box">
                   <div className="rrd-evidence-header">

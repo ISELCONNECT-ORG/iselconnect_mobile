@@ -354,6 +354,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
     }
   };
 
+  // DELETE REPORT FUNCTION
   const handleDeleteReport = async () => {
     setLoading(true);
     try {
@@ -590,7 +591,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
             className="success-modal-box"
             style={{ borderTop: "6px solid #dc2626" }}
           >
-            {/* UPDATED: Added backgroundColor: "#ffffff" */}
             <div
               className="success-modal-header"
               style={{

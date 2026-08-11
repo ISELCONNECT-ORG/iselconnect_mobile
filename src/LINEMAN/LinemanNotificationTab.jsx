@@ -1,53 +1,115 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
-import { Bell } from "lucide-react";
-import "../Lineman.css";
+import LinemanReportDetail from "./LinemanReportDetail";
 import { translations } from "../components/translations";
-import LoadingScreen from "../components/LoadingScreen";
 
-function LinemanNotificationTab() {
+const getPriorityColor = (level) => {
+  switch (level?.toUpperCase()) {
+    case "CRITICAL":
+      return "#ef4444";
+    case "HIGH":
+      return "#f97316";
+    case "NORMAL":
+      return "#3b82f6";
+    case "LOW":
+      return "#10b981";
+    default:
+      return "#1b0b8c";
+  }
+};
+
+function LinemanHistoryTab() {
   const currentLang = localStorage.getItem("appLanguage") || "English";
   const t = translations[currentLang];
 
-  const [notifications, setNotifications] = useState([]);
+  const [activeView, setActiveView] = useState("RESOLVED");
+
+  const [resolvedReports, setResolvedReports] = useState([]);
+  const [generalReports, setGeneralReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedReport, setSelectedReport] = useState(null);
 
   useEffect(() => {
-    fetchNotifications();
+    fetchAllData();
   }, []);
 
-  const fetchNotifications = async () => {
+  const fetchAllData = async () => {
     try {
+      setLoading(true);
       const {
         data: { user },
-        error: userError,
       } = await supabase.auth.getUser();
-      if (userError || !user) throw userError;
+      if (!user) return;
 
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("residents_id", user.id)
-        .order("created_at", { ascending: false });
+      const { data: userData } = await supabase
+        .from("users")
+        .select("branch_id")
+        .eq("id", user.id)
+        .maybeSingle();
 
-      if (error) throw error;
-      setNotifications(data || []);
+      const { data: assignmentsData } = await supabase
+        .from("assignments")
+        .select(
+          `reports ( id, description, landmark, latitude, longitude, photo_url, purok_sitio, created_at, barangays ( name ), municipalities ( name ), report_types ( name, priority_level ), report_statuses ( id, name ) )`,
+        )
+        .eq("lineman_id", user.id);
+
+      if (assignmentsData) {
+        const extracted = assignmentsData.map((a) => a.reports).filter(Boolean);
+        const resolved = extracted.filter(
+          (r) => r.report_statuses?.name?.toUpperCase() === "RESOLVED",
+        );
+        setResolvedReports(
+          resolved.sort(
+            (a, b) => new Date(b.created_at) - new Date(a.created_at),
+          ),
+        );
+      }
+
+      let query = supabase
+        .from("reports")
+        .select(
+          `id, landmark, purok_sitio, created_at, barangays ( name ), municipalities ( name ), report_types ( name, priority_level )`,
+        )
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (userData?.branch_id) {
+        query = query.eq("branch_id", userData.branch_id);
+      }
+
+      const { data: generalData } = await query;
+      if (generalData) setGeneralReports(generalData);
     } catch (error) {
-      console.error("Error fetching notifications:", error.message);
+      console.error("Error fetching history data:", error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatDateTime = (dateString) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    return date.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
+  const formatAddress = (report) => {
+    return [
+      report.purok_sitio,
+      report.barangays?.name,
+      report.municipalities?.name,
+      "Isabela",
+    ]
+      .filter(Boolean)
+      .join(", ");
   };
+
+  if (selectedReport) {
+    return (
+      <LinemanReportDetail
+        report={selectedReport}
+        onBack={() => setSelectedReport(null)}
+        onReportUpdated={() => {
+          setSelectedReport(null);
+          fetchAllData();
+        }}
+      />
+    );
+  }
 
   return (
     <div
@@ -61,13 +123,12 @@ function LinemanNotificationTab() {
         minHeight: "100%",
       }}
     >
-      {/* STICKY HEADER */}
       <div
         style={{
           position: "sticky",
           top: 0,
           margin: "-18px -16px 20px -16px",
-          padding: "22px 16px 18px 16px", // Added slightly more padding to accommodate the larger text
+          padding: "22px 16px 18px 16px",
           background: "rgba(255, 255, 255, 0.92)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
@@ -76,21 +137,73 @@ function LinemanNotificationTab() {
         }}
       >
         <h2
-          className="text-navy"
           style={{
-            margin: 0,
-            fontSize: "1.8rem", // Enlarged font size
+            color: "#1b0b8c",
+            margin: "0 0 15px 0",
+            fontSize: "1.8rem",
             fontWeight: "900",
-            letterSpacing: "1px", // Spread out slightly for a cleaner look
-            textTransform: "uppercase", // Forced uppercase
+            letterSpacing: "1px",
+            textTransform: "uppercase",
           }}
         >
-          {t.notificationTitle || "Notifications"}
+          Report Logs
         </h2>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "5px",
+            background: "#e2e8f0",
+            padding: "6px",
+            borderRadius: "14px",
+          }}
+        >
+          <button
+            onClick={() => setActiveView("RESOLVED")}
+            style={{
+              flex: 1,
+              padding: "12px 10px",
+              borderRadius: "10px",
+              border: "none",
+              fontWeight: "900",
+              fontSize: "0.85rem",
+              background: activeView === "RESOLVED" ? "#ffffff" : "transparent",
+              color: activeView === "RESOLVED" ? "#1b0b8c" : "#64748b",
+              boxShadow:
+                activeView === "RESOLVED"
+                  ? "0 4px 10px rgba(0,0,0,0.08)"
+                  : "none",
+              cursor: "pointer",
+              transition: "all 0.3s ease",
+            }}
+          >
+            Resolved ({resolvedReports.length})
+          </button>
+          <button
+            onClick={() => setActiveView("GENERAL")}
+            style={{
+              flex: 1,
+              padding: "12px 10px",
+              borderRadius: "10px",
+              border: "none",
+              fontWeight: "900",
+              fontSize: "0.85rem",
+              background: activeView === "GENERAL" ? "#ffffff" : "transparent",
+              color: activeView === "GENERAL" ? "#1b0b8c" : "#64748b",
+              boxShadow:
+                activeView === "GENERAL"
+                  ? "0 4px 10px rgba(0,0,0,0.08)"
+                  : "none",
+              cursor: "pointer",
+              transition: "all 0.3s ease",
+            }}
+          >
+            General System
+          </button>
+        </div>
       </div>
 
       <div
-        className="notification-list"
         style={{
           display: "flex",
           flexDirection: "column",
@@ -99,83 +212,194 @@ function LinemanNotificationTab() {
         }}
       >
         {loading ? (
-          <LoadingScreen message={t.loadingNotifs} />
-        ) : notifications.length === 0 ? (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              marginTop: "40px",
-              color: "#64748b",
-            }}
-          >
-            <Bell
-              size={48}
-              strokeWidth={1.5}
-              color="#cbd5e1"
-              style={{ marginBottom: "10px" }}
-            />
-            <p style={{ fontWeight: "bold" }}>{t.noNotifs}</p>
-          </div>
+          <p className="l-rt-loading">Loading records...</p>
+        ) : activeView === "RESOLVED" ? (
+          resolvedReports.length === 0 ? (
+            <p className="l-rt-loading" style={{ color: "#64748b" }}>
+              {t.noResolvedReports || "No resolved reports yet."}
+            </p>
+          ) : (
+            resolvedReports.map((report) => (
+              <div
+                key={`resolved-${report.id}`}
+                onClick={() => setSelectedReport(report)}
+                style={{
+                  backgroundColor: "#ffffff",
+                  borderRadius: "16px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "16px",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+                  position: "relative",
+                  overflow: "hidden",
+                  border: "1px solid #f1f5f9",
+                  width: "100%",
+                  boxSizing: "border-box",
+                }}
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: "6px",
+                    backgroundColor: getPriorityColor(
+                      report.report_types?.priority_level,
+                    ),
+                  }}
+                />
+                <div
+                  style={{
+                    paddingLeft: "6px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    flex: 1,
+                    paddingRight: "12px",
+                  }}
+                >
+                  <span
+                    style={{
+                      color: getPriorityColor(
+                        report.report_types?.priority_level,
+                      ),
+                      fontSize: "0.65rem",
+                      fontWeight: "900",
+                      letterSpacing: "0.5px",
+                      textTransform: "uppercase",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    {report.report_types?.priority_level || "Normal"} Priority
+                  </span>
+                  <h3
+                    style={{
+                      margin: "0 0 4px 0",
+                      color: "#1b0b8c",
+                      fontSize: "1.05rem",
+                      fontWeight: "900",
+                      letterSpacing: "0.2px",
+                      lineHeight: "1.2",
+                    }}
+                  >
+                    {report.report_types?.name || "UNKNOWN ISSUE"}
+                  </h3>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#64748b",
+                      fontSize: "0.8rem",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    {formatAddress(report)}
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    backgroundColor: "#f0fdf4",
+                    color: "#16a34a",
+                    border: "1px solid #bbf7d0",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    fontSize: "0.7rem",
+                    fontWeight: "900",
+                    letterSpacing: "0.5px",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  RESOLVED
+                </div>
+              </div>
+            ))
+          )
+        ) : generalReports.length === 0 ? (
+          <p className="l-rt-loading" style={{ color: "#64748b" }}>
+            {t.noGeneralReports || "No general reports found."}
+          </p>
         ) : (
-          notifications.map((notif) => (
+          generalReports.map((report) => (
             <div
-              key={notif.id}
+              key={`general-${report.id}`}
               style={{
                 backgroundColor: "#ffffff",
-                borderRadius: "20px",
-                padding: "16px 20px",
-                margin: 0,
-                boxShadow: "0 4px 10px rgba(27, 11, 140, 0.05)",
-                borderLeft: notif.is_read
-                  ? "6px solid #cbd5e1"
-                  : "6px solid #f5c400",
-                opacity: notif.is_read ? 0.75 : 1,
+                borderRadius: "16px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                padding: "16px",
+                boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+                position: "relative",
+                overflow: "hidden",
+                border: "1px solid #f1f5f9",
+                width: "100%",
+                boxSizing: "border-box",
               }}
             >
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  marginBottom: "5px",
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: "6px",
+                  backgroundColor: getPriorityColor(
+                    report.report_types?.priority_level,
+                  ),
                 }}
-              >
-                <h3
-                  style={{
-                    margin: 0,
-                    fontSize: "0.95rem",
-                    fontWeight: "900",
-                    color: "#1b0b8c",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {notif.title}
-                </h3>
+              />
+              <div style={{ paddingLeft: "6px" }}>
                 <span
                   style={{
-                    fontSize: "0.75rem",
-                    color: "#64748b",
-                    fontWeight: "700",
-                    whiteSpace: "nowrap",
-                    marginLeft: "10px",
+                    color: getPriorityColor(
+                      report.report_types?.priority_level,
+                    ),
+                    fontSize: "0.65rem",
+                    fontWeight: "900",
+                    letterSpacing: "0.5px",
+                    textTransform: "uppercase",
+                    marginBottom: "4px",
+                    display: "block",
                   }}
                 >
-                  {formatDateTime(notif.created_at)}
+                  {report.report_types?.priority_level || "Normal"} Priority
                 </span>
+                <h3
+                  style={{
+                    margin: "0 0 4px 0",
+                    color: "#1b0b8c",
+                    fontSize: "1.05rem",
+                    fontWeight: "900",
+                    letterSpacing: "0.2px",
+                    lineHeight: "1.2",
+                  }}
+                >
+                  {report.report_types?.name || "UNKNOWN ISSUE"}
+                </h3>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#64748b",
+                    fontSize: "0.8rem",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {formatAddress(report)}
+                </p>
               </div>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "0.85rem",
-                  color: "#475569",
-                  lineHeight: "1.5",
-                  fontWeight: "500",
-                }}
-              >
-                {notif.message}
-              </p>
             </div>
           ))
         )}
@@ -184,4 +408,4 @@ function LinemanNotificationTab() {
   );
 }
 
-export default LinemanNotificationTab;
+export default LinemanHistoryTab;

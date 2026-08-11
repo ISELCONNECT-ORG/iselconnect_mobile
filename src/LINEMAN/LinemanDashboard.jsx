@@ -1,20 +1,21 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
+import { logSystemAction } from "../utils/logger"; // Added your logger!
 import ReportTab from "./LinemanReportTab";
 import HistoryTab from "./LinemanHistoryTab";
 import NotificationTab from "./LinemanNotificationTab";
 import ProfileTab from "./LinemanProfileTab";
 import "../Lineman.css";
 
-import { List, Archive, Bell, User, Power } from "lucide-react";
+import { List, Archive, Bell, User, Power, AlertTriangle } from "lucide-react";
 
 function LinemanDashboard() {
   const [activeTab, setActiveTab] = useState("report");
   const [dutyStatus, setDutyStatus] = useState("Loading...");
   const [userId, setUserId] = useState(null);
 
-  // NEW: Track if the admin has actually created an employee row for this user
   const [hasEmployeeRow, setHasEmployeeRow] = useState(true);
+  const [showOffDutyConfirm, setShowOffDutyConfirm] = useState(false); // NEW: Confirmation State
 
   useEffect(() => {
     const fetchDutyStatus = async () => {
@@ -39,7 +40,6 @@ function LinemanDashboard() {
           setDutyStatus(data.duty_status || "Off Duty");
           setHasEmployeeRow(true);
         } else {
-          // If data is null, they don't have a row in the employees table!
           setDutyStatus("Off Duty");
           setHasEmployeeRow(false);
         }
@@ -49,10 +49,10 @@ function LinemanDashboard() {
     fetchDutyStatus();
   }, []);
 
-  const toggleDuty = async () => {
+  // NEW: Intercepts the click before running the database update
+  const handleDutyClick = () => {
     if (!userId || dutyStatus === "Loading...") return;
 
-    // Safety check: Prevent updating if they don't exist in the employees table
     if (!hasEmployeeRow) {
       alert(
         "System Error: Your account is not linked to an employee profile. Please ask an Admin to set up your Employee record.",
@@ -60,8 +60,16 @@ function LinemanDashboard() {
       return;
     }
 
+    if (dutyStatus === "On Duty") {
+      setShowOffDutyConfirm(true); // Open Modal
+    } else {
+      executeDutyToggle("On Duty"); // Start duty immediately without modal
+    }
+  };
+
+  // The actual database logic moved into a helper function
+  const executeDutyToggle = async (newStatus) => {
     const previousStatus = dutyStatus;
-    const newStatus = dutyStatus === "On Duty" ? "Off Duty" : "On Duty";
 
     // Optimistic UI update
     setDutyStatus(newStatus);
@@ -75,10 +83,21 @@ function LinemanDashboard() {
       .eq("user_id", userId);
 
     if (error) {
-      // NEW: Show the exact error to the user and revert the button
       console.error("Error updating duty status:", error);
       alert("Failed to update status: " + error.message);
       setDutyStatus(previousStatus);
+    } else {
+      // NEW: Log the shift change for Admins to see!
+      try {
+        const action = newStatus === "On Duty" ? "DUTY_STARTED" : "DUTY_ENDED";
+        const details =
+          newStatus === "On Duty"
+            ? "Lineman clocked IN and went on duty."
+            : "Lineman clocked OUT and went off duty.";
+        await logSystemAction(action, details);
+      } catch (logErr) {
+        console.warn("Could not write duty log:", logErr);
+      }
     }
   };
 
@@ -87,6 +106,72 @@ function LinemanDashboard() {
       className="lineman-dashboard-layout"
       style={{ display: "flex", flexDirection: "column", height: "100vh" }}
     >
+      {/* --- CONFIRMATION MODAL --- */}
+      {showOffDutyConfirm && (
+        <div className="success-modal-overlay" style={{ zIndex: 999999 }}>
+          <div
+            className="success-modal-box"
+            style={{ borderTop: "6px solid #f59e0b" }}
+          >
+            <div
+              className="success-modal-header"
+              style={{
+                color: "#f59e0b",
+                marginBottom: "10px",
+                backgroundColor: "#ffffff",
+              }}
+            >
+              <Power
+                size={42}
+                style={{ margin: "0 auto 10px auto", display: "block" }}
+              />
+              <h2 style={{ margin: 0, fontSize: "1.4rem" }}>END SHIFT?</h2>
+            </div>
+            <div className="success-modal-body">
+              <p
+                style={{
+                  margin: "0 0 20px 0",
+                  color: "#475569",
+                  lineHeight: "1.5",
+                  fontWeight: "600",
+                }}
+              >
+                Are you sure you want to go Off Duty? You will no longer receive
+                new assignments.
+              </p>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  className="success-modal-btn"
+                  onClick={() => setShowOffDutyConfirm(false)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#f1f5f9",
+                    color: "#475569",
+                    border: "1px solid #cbd5e1",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="success-modal-btn"
+                  onClick={() => {
+                    setShowOffDutyConfirm(false);
+                    executeDutyToggle("Off Duty");
+                  }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#f59e0b",
+                    color: "white",
+                  }}
+                >
+                  Go Off Duty
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- GLOBAL DUTY STATUS BANNER --- */}
       <div
         style={{
@@ -127,7 +212,7 @@ function LinemanDashboard() {
         </div>
 
         <button
-          onClick={toggleDuty}
+          onClick={handleDutyClick} // Changed to the new handler!
           disabled={dutyStatus === "Loading..." || !hasEmployeeRow}
           style={{
             backgroundColor: "white",

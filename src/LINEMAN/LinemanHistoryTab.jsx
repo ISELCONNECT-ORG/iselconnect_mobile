@@ -123,13 +123,12 @@ function LinemanHistoryTab() {
         minHeight: "100%",
       }}
     >
-      {/* STICKY HEADER & TOGGLE */}
       <div
         style={{
           position: "sticky",
           top: 0,
           margin: "-18px -16px 20px -16px",
-          padding: "22px 16px 18px 16px", // Adjusted padding to match Notifications tab
+          padding: "22px 16px 18px 16px",
           background: "rgba(255, 255, 255, 0.92)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
@@ -138,19 +137,18 @@ function LinemanHistoryTab() {
         }}
       >
         <h2
-          className="text-navy"
           style={{
+            color: "#1b0b8c",
             margin: "0 0 15px 0",
-            fontSize: "1.8rem", // Enlarged font size
+            fontSize: "1.8rem",
             fontWeight: "900",
-            letterSpacing: "1px", // Spread out slightly for a cleaner look
-            textTransform: "uppercase", // Forced uppercase
+            letterSpacing: "1px",
+            textTransform: "uppercase",
           }}
         >
           Report Logs
         </h2>
 
-        {/* --- SEGMENTED TOGGLE SWITCH --- */}
         <div
           style={{
             display: "flex",
@@ -204,7 +202,6 @@ function LinemanHistoryTab() {
           </button>
         </div>
       </div>
-      {/* ------------------------------- */}
 
       <div
         style={{
@@ -217,7 +214,6 @@ function LinemanHistoryTab() {
         {loading ? (
           <p className="l-rt-loading">Loading records...</p>
         ) : activeView === "RESOLVED" ? (
-          /* RESOLVED VIEW */
           resolvedReports.length === 0 ? (
             <p className="l-rt-loading" style={{ color: "#64748b" }}>
               {t.noResolvedReports || "No resolved reports yet."}
@@ -226,52 +222,99 @@ function LinemanHistoryTab() {
             resolvedReports.map((report) => (
               <div
                 key={`resolved-${report.id}`}
-                className="lineman-report-card cursor-pointer"
                 onClick={() => setSelectedReport(report)}
                 style={{
-                  width: "100%",
-                  boxSizing: "border-box",
+                  backgroundColor: "#ffffff",
+                  borderRadius: "16px",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  gap: "10px",
-                  margin: 0,
-                  borderLeft: `6px solid ${getPriorityColor(report.report_types?.priority_level)}`,
+                  padding: "16px",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+                  position: "relative",
+                  overflow: "hidden",
+                  border: "1px solid #f1f5f9",
+                  width: "100%",
+                  boxSizing: "border-box",
                 }}
               >
-                <div style={{ flex: 1 }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: "6px",
+                    backgroundColor: getPriorityColor(
+                      report.report_types?.priority_level,
+                    ),
+                  }}
+                />
+                <div
+                  style={{
+                    paddingLeft: "6px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    flex: 1,
+                    paddingRight: "12px",
+                  }}
+                >
                   <span
                     style={{
-                      fontSize: "0.65rem",
-                      fontWeight: "900",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
                       color: getPriorityColor(
                         report.report_types?.priority_level,
                       ),
-                      display: "block",
+                      fontSize: "0.65rem",
+                      fontWeight: "900",
+                      letterSpacing: "0.5px",
+                      textTransform: "uppercase",
                       marginBottom: "4px",
                     }}
                   >
                     {report.report_types?.priority_level || "Normal"} Priority
                   </span>
-                  <h3 className="lineman-report-title">
-                    {report.report_types?.name}
+                  <h3
+                    style={{
+                      margin: "0 0 4px 0",
+                      color: "#1b0b8c",
+                      fontSize: "1.05rem",
+                      fontWeight: "900",
+                      letterSpacing: "0.2px",
+                      lineHeight: "1.2",
+                    }}
+                  >
+                    {report.report_types?.name || "UNKNOWN ISSUE"}
                   </h3>
-                  <p className="lineman-report-address">
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#64748b",
+                      fontSize: "0.8rem",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      lineHeight: "1.4",
+                    }}
+                  >
                     {formatAddress(report)}
                   </p>
                 </div>
+
                 <div
                   style={{
-                    backgroundColor: "#ecfdf5",
-                    color: "#065f46",
+                    backgroundColor: "#f0fdf4",
+                    color: "#16a34a",
                     border: "1px solid #bbf7d0",
                     padding: "6px 12px",
-                    borderRadius: "50px",
+                    borderRadius: "20px",
                     fontSize: "0.7rem",
                     fontWeight: "900",
                     letterSpacing: "0.5px",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
                   }}
                 >
                   RESOLVED
@@ -279,8 +322,7 @@ function LinemanHistoryTab() {
               </div>
             ))
           )
-        ) : /* GENERAL VIEW */
-        generalReports.length === 0 ? (
+        ) : generalReports.length === 0 ? (
           <p className="l-rt-loading" style={{ color: "#64748b" }}>
             {t.noGeneralReports || "No general reports found."}
           </p>
@@ -288,31 +330,76 @@ function LinemanHistoryTab() {
           generalReports.map((report) => (
             <div
               key={`general-${report.id}`}
-              className="lineman-report-card"
               style={{
+                backgroundColor: "#ffffff",
+                borderRadius: "16px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                padding: "16px",
+                boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+                position: "relative",
+                overflow: "hidden",
+                border: "1px solid #f1f5f9",
                 width: "100%",
                 boxSizing: "border-box",
-                margin: 0,
-                borderLeft: `6px solid ${getPriorityColor(report.report_types?.priority_level)}`,
               }}
             >
-              <span
+              <div
                 style={{
-                  fontSize: "0.65rem",
-                  fontWeight: "900",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px",
-                  color: getPriorityColor(report.report_types?.priority_level),
-                  display: "block",
-                  marginBottom: "4px",
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: "6px",
+                  backgroundColor: getPriorityColor(
+                    report.report_types?.priority_level,
+                  ),
                 }}
-              >
-                {report.report_types?.priority_level || "Normal"} Priority
-              </span>
-              <h3 className="lineman-report-title">
-                {report.report_types?.name}
-              </h3>
-              <p className="lineman-report-address">{formatAddress(report)}</p>
+              />
+              <div style={{ paddingLeft: "6px" }}>
+                <span
+                  style={{
+                    color: getPriorityColor(
+                      report.report_types?.priority_level,
+                    ),
+                    fontSize: "0.65rem",
+                    fontWeight: "900",
+                    letterSpacing: "0.5px",
+                    textTransform: "uppercase",
+                    marginBottom: "4px",
+                    display: "block",
+                  }}
+                >
+                  {report.report_types?.priority_level || "Normal"} Priority
+                </span>
+                <h3
+                  style={{
+                    margin: "0 0 4px 0",
+                    color: "#1b0b8c",
+                    fontSize: "1.05rem",
+                    fontWeight: "900",
+                    letterSpacing: "0.2px",
+                    lineHeight: "1.2",
+                  }}
+                >
+                  {report.report_types?.name || "UNKNOWN ISSUE"}
+                </h3>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#64748b",
+                    fontSize: "0.8rem",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {formatAddress(report)}
+                </p>
+              </div>
             </div>
           ))
         )}

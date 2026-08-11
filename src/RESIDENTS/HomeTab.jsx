@@ -40,7 +40,6 @@ function HomeTab() {
         setUserName(`${userData.first_name} ${userData.last_name}`);
       }
 
-      // ADDED: priority_level to the report_types selection
       const { data: reportsData, error: reportsError } = await supabase
         .from("reports")
         .select(
@@ -92,20 +91,19 @@ function HomeTab() {
     return status;
   };
 
-  // UPDATED: Now maps directly to the actual database priorities
   const getPriority = (priorityLevel) => {
     const level = priorityLevel?.toUpperCase() || "NORMAL";
     switch (level) {
       case "CRITICAL":
-        return { text: "CRITICAL PRIORITY", color: "#ef4444" }; // Red
+        return { text: "CRITICAL PRIORITY", color: "#ef4444" };
       case "HIGH":
-        return { text: "HIGH PRIORITY", color: "#ea580c" }; // Orange
+        return { text: "HIGH PRIORITY", color: "#ea580c" };
       case "NORMAL":
-        return { text: "NORMAL PRIORITY", color: "#0284c7" }; // Blue
+        return { text: "NORMAL PRIORITY", color: "#0284c7" };
       case "LOW":
-        return { text: "LOW PRIORITY", color: "#10b981" }; // Green
+        return { text: "LOW PRIORITY", color: "#10b981" };
       default:
-        return { text: "NORMAL PRIORITY", color: "#0284c7" }; // Fallback Blue
+        return { text: "NORMAL PRIORITY", color: "#0284c7" };
     }
   };
 
@@ -275,7 +273,6 @@ function HomeTab() {
           </button>
         </div>
 
-        {/* 2x2 Grid for Status Boxes */}
         <div
           style={{
             display: "grid",
@@ -557,20 +554,6 @@ function HomeTab() {
                 >
                   <div
                     style={{
-                      position: "absolute",
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: "6px",
-                      backgroundColor: getPriority(
-                        report.report_types?.priority_level,
-                      ).color,
-                    }}
-                  />
-
-                  <div
-                    style={{
-                      paddingLeft: "6px",
                       display: "flex",
                       flexDirection: "column",
                       justifyContent: "center",
@@ -578,19 +561,40 @@ function HomeTab() {
                       paddingRight: "12px",
                     }}
                   >
-                    <span
+                    {/* NEW MINIMAL PRIORITY INDICATOR */}
+                    <div
                       style={{
-                        color: getPriority(report.report_types?.priority_level)
-                          .color,
-                        fontSize: "0.65rem",
-                        fontWeight: "900",
-                        letterSpacing: "0.5px",
-                        textTransform: "uppercase",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
                         marginBottom: "4px",
                       }}
                     >
-                      {getPriority(report.report_types?.priority_level).text}
-                    </span>
+                      <div
+                        style={{
+                          width: "8px",
+                          height: "8px",
+                          borderRadius: "50%",
+                          backgroundColor: getPriority(
+                            report.report_types?.priority_level,
+                          ).color,
+                        }}
+                      />
+                      <span
+                        style={{
+                          color: getPriority(
+                            report.report_types?.priority_level,
+                          ).color,
+                          fontSize: "0.65rem",
+                          fontWeight: "900",
+                          letterSpacing: "0.5px",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {getPriority(report.report_types?.priority_level).text}
+                      </span>
+                    </div>
+
                     <h3
                       style={{
                         margin: "0 0 4px 0",

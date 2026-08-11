@@ -136,7 +136,6 @@ function LinemanReportTab() {
         minHeight: "100%",
       }}
     >
-      {/* STICKY HEADER */}
       <div
         style={{
           position: "sticky",
@@ -257,7 +256,6 @@ function LinemanReportTab() {
       </div>
 
       <div
-        className="l-rt-list-wrapper"
         style={{
           display: "flex",
           flexDirection: "column",
@@ -285,69 +283,116 @@ function LinemanReportTab() {
                 : statusName === "IN PROGRESS"
                   ? t.inProgress
                   : statusName;
+
+            // EXACT BADGE STYLES FROM RESIDENT TAB
             let badgeBg = "#f1f5f9",
               badgeColor = "#475569",
               badgeBorder = "#cbd5e1";
-
             if (statusName === "PENDING") {
               badgeBg = "#fffbeb";
-              badgeColor = "#b45309";
-              badgeBorder = "#fef3c7";
+              badgeColor = "#ca8a04";
+              badgeBorder = "#fef08a";
             } else if (statusName === "IN PROGRESS") {
-              badgeBg = "#eff6ff";
-              badgeColor = "#1d4ed8";
-              badgeBorder = "#bfdbfe";
+              badgeBg = "#f0f9ff";
+              badgeColor = "#0284c7";
+              badgeBorder = "#bae6fd";
             }
 
             return (
               <div
                 key={`assigned-${report.id}`}
-                className="lineman-report-card cursor-pointer"
                 onClick={() => setSelectedReport(report)}
                 style={{
-                  width: "100%",
-                  boxSizing: "border-box",
+                  backgroundColor: "#ffffff",
+                  borderRadius: "16px",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  gap: "10px",
-                  margin: 0,
-                  borderLeft: `6px solid ${getPriorityColor(report.report_types?.priority_level)}`,
+                  padding: "16px",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+                  position: "relative",
+                  overflow: "hidden",
+                  border: "1px solid #f1f5f9",
+                  width: "100%",
+                  boxSizing: "border-box",
                 }}
               >
-                <div style={{ flex: 1 }}>
+                {/* Rounded Absolute Line */}
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: "6px",
+                    backgroundColor: getPriorityColor(
+                      report.report_types?.priority_level,
+                    ),
+                  }}
+                />
+
+                <div
+                  style={{
+                    paddingLeft: "6px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    flex: 1,
+                    paddingRight: "12px",
+                  }}
+                >
                   <span
                     style={{
-                      fontSize: "0.65rem",
-                      fontWeight: "900",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
                       color: getPriorityColor(
                         report.report_types?.priority_level,
                       ),
-                      display: "block",
+                      fontSize: "0.65rem",
+                      fontWeight: "900",
+                      letterSpacing: "0.5px",
+                      textTransform: "uppercase",
                       marginBottom: "4px",
                     }}
                   >
                     {report.report_types?.priority_level || "Normal"} Priority
                   </span>
 
-                  {/* NEW: Displaying the Report ID right beside the report type name */}
-                  <h3 className="lineman-report-title">
+                  <h3
+                    style={{
+                      margin: "0 0 4px 0",
+                      color: "#1b0b8c",
+                      fontSize: "1.05rem",
+                      fontWeight: "900",
+                      letterSpacing: "0.2px",
+                      lineHeight: "1.2",
+                    }}
+                  >
                     {report.id}. {report.report_types?.name || "UNKNOWN ISSUE"}
                   </h3>
 
-                  <p className="lineman-report-address">
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#64748b",
+                      fontSize: "0.8rem",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      lineHeight: "1.4",
+                    }}
+                  >
                     {formatAddress(report)}
                   </p>
                 </div>
+
                 <div
                   style={{
                     backgroundColor: badgeBg,
                     color: badgeColor,
                     border: `1px solid ${badgeBorder}`,
                     padding: "6px 12px",
-                    borderRadius: "50px",
+                    borderRadius: "20px",
                     fontSize: "0.7rem",
                     fontWeight: "900",
                     letterSpacing: "0.5px",

@@ -27,6 +27,9 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showMap, setShowMap] = useState(false);
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
   const [linemanLocation, setLinemanLocation] = useState(null);
   const [timelineData, setTimelineData] = useState(null);
   const [assignedLinemen, setAssignedLinemen] = useState([]);
@@ -37,7 +40,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const linemanMarkerRef = useRef(null);
   const lineRef = useRef(null);
 
-  // Status checks
   const statusName = report.report_statuses?.name?.toUpperCase() || "PENDING";
   const isPending = statusName === "PENDING";
   const isInProgress = statusName === "IN PROGRESS";
@@ -344,26 +346,30 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
       );
       setShowSuccessModal(true);
     } catch (err) {
-      alert("Failed to update report. Please try again.\n" + err.message);
+      setErrorMessage(
+        "Failed to update report. Please try again.\n\n" + err.message,
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteReport = async () => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this report? This action cannot be undone.",
-    );
-    if (!confirmDelete) return;
-
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("reports")
         .delete()
-        .eq("id", report.id);
+        .eq("id", report.id)
+        .select();
 
       if (error) throw error;
+
+      if (!data || data.length === 0) {
+        throw new Error(
+          "Delete blocked by database security policies. Please run the SQL DELETE policy in Supabase.",
+        );
+      }
 
       await logSystemAction(
         "DELETE_REPORT",
@@ -372,7 +378,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
 
       if (onReportUpdated) onReportUpdated();
     } catch (err) {
-      alert("Failed to delete report. Please try again.\n" + err.message);
+      setErrorMessage("Failed to delete report.\n\n" + err.message);
     } finally {
       setLoading(false);
     }
@@ -572,6 +578,122 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 }}
               >
                 OK!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="success-modal-overlay">
+          <div
+            className="success-modal-box"
+            style={{ borderTop: "6px solid #dc2626" }}
+          >
+            {/* UPDATED: Added backgroundColor: "#ffffff" */}
+            <div
+              className="success-modal-header"
+              style={{
+                color: "#dc2626",
+                marginBottom: "10px",
+                backgroundColor: "#ffffff",
+              }}
+            >
+              <Trash2
+                size={42}
+                style={{ margin: "0 auto 10px auto", display: "block" }}
+              />
+              <h2 style={{ margin: 0, fontSize: "1.4rem" }}>DELETE REPORT?</h2>
+            </div>
+            <div className="success-modal-body">
+              <p
+                style={{
+                  margin: "0 0 20px 0",
+                  color: "#475569",
+                  lineHeight: "1.5",
+                  fontWeight: "600",
+                }}
+              >
+                Are you sure you want to delete this report? This action cannot
+                be undone.
+              </p>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  className="success-modal-btn"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#f1f5f9",
+                    color: "#475569",
+                    border: "1px solid #cbd5e1",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="success-modal-btn"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    handleDeleteReport();
+                  }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#dc2626",
+                    color: "white",
+                  }}
+                >
+                  Yes, Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="success-modal-overlay">
+          <div
+            className="success-modal-box"
+            style={{ borderTop: "6px solid #dc2626" }}
+          >
+            {/* UPDATED: Added backgroundColor: "#ffffff" */}
+            <div
+              className="success-modal-header"
+              style={{
+                color: "#dc2626",
+                marginBottom: "10px",
+                backgroundColor: "#ffffff",
+              }}
+            >
+              <X
+                size={42}
+                style={{ margin: "0 auto 10px auto", display: "block" }}
+              />
+              <h2 style={{ margin: 0, fontSize: "1.4rem" }}>ERROR</h2>
+            </div>
+            <div className="success-modal-body">
+              <p
+                style={{
+                  margin: "0 0 20px 0",
+                  color: "#475569",
+                  lineHeight: "1.5",
+                  fontSize: "0.9rem",
+                  whiteSpace: "pre-wrap",
+                  fontWeight: "600",
+                }}
+              >
+                {errorMessage}
+              </p>
+              <button
+                className="success-modal-btn"
+                onClick={() => setErrorMessage("")}
+                style={{
+                  backgroundColor: "#dc2626",
+                  color: "white",
+                  width: "100%",
+                }}
+              >
+                Close
               </button>
             </div>
           </div>
@@ -968,7 +1090,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 </p>
               </div>
 
-              {/* Perfectly Balanced Buttons */}
               {isPending && (
                 <div
                   style={{ display: "flex", gap: "10px", marginTop: "15px" }}
@@ -993,7 +1114,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                   </button>
 
                   <button
-                    onClick={handleDeleteReport}
+                    onClick={() => setShowDeleteConfirm(true)}
                     disabled={loading}
                     className="rrd-edit-btn"
                     style={{

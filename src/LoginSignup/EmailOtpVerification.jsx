@@ -59,7 +59,7 @@ export default function EmailOtpVerification({
             value={otp}
             onChange={onOtpChange}
             placeholder="Enter OTP Code"
-            maxLength={8}
+            maxLength={6}
             className="auth-input"
             style={{
               textAlign: "center",
@@ -76,9 +76,9 @@ export default function EmailOtpVerification({
           type="button"
           className="auth-submit-btn"
           onClick={onVerifyOTP}
-          disabled={loading || otp.length < 8}
+          disabled={loading || otp.length < 6}
           style={{
-            backgroundColor: loading || otp.length < 8 ? "#94a3b8" : "#16a34a",
+            backgroundColor: loading || otp.length < 6 ? "#94a3b8" : "#16a34a",
           }}
         >
           {loading ? "Verifying..." : "Verify & Complete"}

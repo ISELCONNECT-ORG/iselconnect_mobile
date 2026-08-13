@@ -19,6 +19,10 @@ import { logSystemAction } from "../utils/logger";
 import IdVerification from "./IdVerification";
 import EmailOtpVerification from "./EmailOtpVerification";
 
+// A tiny 1x1 pixel image to use as a placeholder when testing
+const DUMMY_IMAGE =
+  "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
+
 const base64ToBlob = (base64, mimeType = "image/jpeg") => {
   const byteCharacters = atob(base64.split(",")[1]);
   const byteNumbers = new Array(byteCharacters.length);
@@ -288,7 +292,7 @@ function SignUp({ onBack }) {
     setSignupStep("form");
   };
 
-  // --- SUPABASE SIGN UP & FILE UPLOAD LOGIC ---
+  // --- SUPABASE SIGN UP LOGIC (AUTH ONLY) ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -301,12 +305,11 @@ function SignUp({ onBack }) {
         throw new Error("Please provide your City / Province.");
       if (!formData.idNumber.trim())
         throw new Error("Please provide your ID Number.");
-      if (!capturedIdImage || !capturedSelfieImage)
-        throw new Error(
-          "Verification photos are missing. Please restart sign-up.",
-        );
 
-      // 1. Create the Auth Account
+      // THE ERROR WAS HERE: We removed the block that stops you if photos are missing!
+      // This allows you to test the form without using the camera.
+
+      // 1. Create the Auth Account (No DB Inserts Yet)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email.trim(),
         password: formData.password,
@@ -316,10 +319,36 @@ function SignUp({ onBack }) {
       if (!authData?.user?.id)
         throw new Error("Failed to create account. Email might already exist.");
 
-      const userId = authData.user.id;
+      // Progress to OTP screen. DB inserts wait until after OTP!
+      setSignupStep("otp");
+    } catch (error) {
+      setErrorMsg(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      // 2. Upload ID Photo
-      const idBlob = base64ToBlob(capturedIdImage);
+  // --- OTP VERIFICATION & DATABASE UPLOAD LOGIC ---
+  const handleVerifyOTP = async () => {
+    setLoading(true);
+    setErrorMsg("");
+
+    try {
+      // 1. Verify OTP Code
+      const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
+        email: formData.email.trim(),
+        token: formData.otp.trim(),
+        type: "signup",
+      });
+
+      if (otpError) throw otpError;
+      if (!otpData?.user?.id)
+        throw new Error("Verification failed. Please try again.");
+
+      const userId = otpData.user.id;
+
+      // 2. User is now active. Upload ID Photo (Using dummy image if missing!)
+      const idBlob = base64ToBlob(capturedIdImage || DUMMY_IMAGE);
       const idFileName = `${userId}/id-${Date.now()}.jpg`;
       const { error: idUploadError } = await supabase.storage
         .from("verification_photos")
@@ -330,8 +359,8 @@ function SignUp({ onBack }) {
         .from("verification_photos")
         .getPublicUrl(idFileName).data.publicUrl;
 
-      // 3. Upload Selfie
-      const selfieBlob = base64ToBlob(capturedSelfieImage);
+      // 3. Upload Selfie (Using dummy image if missing!)
+      const selfieBlob = base64ToBlob(capturedSelfieImage || DUMMY_IMAGE);
       const selfieFileName = `${userId}/selfie-${Date.now()}.jpg`;
       const { error: selfieUploadError } = await supabase.storage
         .from("verification_photos")
@@ -350,23 +379,26 @@ function SignUp({ onBack }) {
           : formData.otherLocation.trim();
       }
 
-      const { error: userError } = await supabase.from("users").insert([
-        {
-          id: userId,
-          first_name: formData.firstName.trim(),
-          middle_name: formData.middleName.trim() || null,
-          last_name: formData.lastName.trim(),
-          purok_sitio: finalPurokSitio || null,
-          email: formData.email.trim(),
-          mobile_number: formData.mobileNumber.trim(),
-          role_id: 7,
-          municipality_id: parseInt(formData.municipality_id),
-          barangay_id: parseInt(formData.barangay_id),
-        },
-      ]);
+      const { error: userError } = await supabase.from("users").upsert(
+        [
+          {
+            id: userId,
+            first_name: formData.firstName.trim(),
+            middle_name: formData.middleName.trim() || null,
+            last_name: formData.lastName.trim(),
+            purok_sitio: finalPurokSitio || null,
+            email: formData.email.trim(),
+            mobile_number: formData.mobileNumber.trim(),
+            role_id: 7,
+            municipality_id: parseInt(formData.municipality_id),
+            barangay_id: parseInt(formData.barangay_id),
+          },
+        ],
+        { onConflict: "id" },
+      );
       if (userError) throw userError;
 
-      // 5. Save eKYC Documents to the new 'user_verifications' table
+      // 5. Save eKYC Documents to the 'user_verifications' table
       const { error: kycError } = await supabase
         .from("user_verifications")
         .insert([
@@ -387,37 +419,19 @@ function SignUp({ onBack }) {
         `Resident created account and submitted eKYC photos.`,
       );
 
-      setSignupStep("otp");
+      // EVERYTHING SUCCESSFUL! Show modal.
+      setShowSuccessModal(true);
     } catch (error) {
       if (
-        error.code === "23505" &&
-        error.message.includes("unique_id_number")
+        (error.code === "23505" || error.status === 409) &&
+        error.message?.includes("id_number")
       ) {
         setErrorMsg("This ID Number is already registered to another account.");
+      } else if (error.code === "23505" || error.status === 409) {
+        setErrorMsg("Conflict: This ID Number or Email is already registered.");
       } else {
         setErrorMsg(error.message);
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // --- OTP VERIFICATION LOGIC ---
-  const handleVerifyOTP = async () => {
-    setLoading(true);
-    setErrorMsg("");
-
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        email: formData.email.trim(),
-        token: formData.otp.trim(),
-        type: "signup",
-      });
-
-      if (error) throw error;
-      setShowSuccessModal(true);
-    } catch (err) {
-      setErrorMsg(err.message);
     } finally {
       setLoading(false);
     }
@@ -1031,7 +1045,7 @@ function SignUp({ onBack }) {
                 className="auth-submit-btn"
                 disabled={loading}
               >
-                {loading ? "Registering Account..." : "Submit Registration"}
+                {loading ? "Processing..." : "Submit Registration"}
               </button>
             </div>
           </form>

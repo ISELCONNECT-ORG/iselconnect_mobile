@@ -55,7 +55,7 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
       localStorage.setItem("recovery_email", email);
 
       setStage("otp");
-      setMessage("An 8-digit OTP has been sent to your email.");
+      setMessage("A 6-digit OTP has been sent to your email.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -178,7 +178,7 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
                 marginBottom: "15px",
               }}
             >
-              Enter your registered email address to receive an 8-digit recovery
+              Enter your registered email address to receive a 6-digit recovery
               code.
             </p>
             <div className="auth-input-group">
@@ -214,18 +214,18 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
                 marginBottom: "15px",
               }}
             >
-              Please check your email <strong>{email}</strong> for the 8-digit
+              Please check your email <strong>{email}</strong> for the 6-digit
               code.
             </p>
             <div className="auth-input-group">
-              <label>8-Digit Code</label>
+              <label>6-Digit Code</label>
               <input
                 type="text"
                 className="auth-input"
-                placeholder="Enter 8-digit code"
+                placeholder="Enter 6-digit code"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.trim())}
-                maxLength={8}
+                maxLength={6}
                 required
                 style={{
                   textAlign: "center",
@@ -237,8 +237,8 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
             <button
               type="submit"
               className="auth-submit-btn"
-              disabled={isLoading || otp.length < 8}
-              style={{ opacity: isLoading || otp.length < 8 ? 0.7 : 1 }}
+              disabled={isLoading || otp.length < 6}
+              style={{ opacity: isLoading || otp.length < 6 ? 0.7 : 1 }}
             >
               {isLoading ? "Verifying..." : "Verify Code"}
             </button>

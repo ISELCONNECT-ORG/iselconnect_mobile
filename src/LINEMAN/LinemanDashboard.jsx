@@ -1,21 +1,25 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
-import { logSystemAction } from "../utils/logger"; // Added your logger!
+import { logSystemAction } from "../utils/logger";
 import ReportTab from "./LinemanReportTab";
 import HistoryTab from "./LinemanHistoryTab";
 import NotificationTab from "./LinemanNotificationTab";
 import ProfileTab from "./LinemanProfileTab";
 import "../Lineman.css";
 
-import { List, Archive, Bell, User, Power, AlertTriangle } from "lucide-react";
+import { List, Archive, Bell, User, Power } from "lucide-react";
 
 function LinemanDashboard() {
   const [activeTab, setActiveTab] = useState("report");
   const [dutyStatus, setDutyStatus] = useState("Loading...");
   const [userId, setUserId] = useState(null);
 
+  // NEW: State for Timestamps
+  const [dutyStartTime, setDutyStartTime] = useState(null);
+  const [dutyEndTime, setDutyEndTime] = useState(null);
+
   const [hasEmployeeRow, setHasEmployeeRow] = useState(true);
-  const [showOffDutyConfirm, setShowOffDutyConfirm] = useState(false); // NEW: Confirmation State
+  const [showOffDutyConfirm, setShowOffDutyConfirm] = useState(false);
 
   useEffect(() => {
     const fetchDutyStatus = async () => {
@@ -26,9 +30,10 @@ function LinemanDashboard() {
       if (user) {
         setUserId(user.id);
 
+        // UPDATED: Fetching the new timestamp columns
         const { data, error } = await supabase
           .from("employees")
-          .select("duty_status")
+          .select("duty_status, duty_start_time, duty_end_time")
           .eq("user_id", user.id)
           .maybeSingle();
 
@@ -38,6 +43,8 @@ function LinemanDashboard() {
 
         if (data) {
           setDutyStatus(data.duty_status || "Off Duty");
+          setDutyStartTime(data.duty_start_time);
+          setDutyEndTime(data.duty_end_time);
           setHasEmployeeRow(true);
         } else {
           setDutyStatus("Off Duty");
@@ -49,7 +56,6 @@ function LinemanDashboard() {
     fetchDutyStatus();
   }, []);
 
-  // NEW: Intercepts the click before running the database update
   const handleDutyClick = () => {
     if (!userId || dutyStatus === "Loading...") return;
 
@@ -61,33 +67,49 @@ function LinemanDashboard() {
     }
 
     if (dutyStatus === "On Duty") {
-      setShowOffDutyConfirm(true); // Open Modal
+      setShowOffDutyConfirm(true);
     } else {
-      executeDutyToggle("On Duty"); // Start duty immediately without modal
+      executeDutyToggle("On Duty");
     }
   };
 
-  // The actual database logic moved into a helper function
   const executeDutyToggle = async (newStatus) => {
     const previousStatus = dutyStatus;
+    const previousStart = dutyStartTime;
+    const previousEnd = dutyEndTime;
 
-    // Optimistic UI update
+    const now = new Date().toISOString();
+
     setDutyStatus(newStatus);
+
+    // Prepare the update payload
+    const updatePayload = {
+      duty_status: newStatus,
+      is_available: newStatus === "On Duty" ? true : false,
+    };
+
+    // Append the correct timestamp based on the action
+    if (newStatus === "On Duty") {
+      updatePayload.duty_start_time = now;
+      setDutyStartTime(now);
+    } else {
+      updatePayload.duty_end_time = now;
+      setDutyEndTime(now);
+    }
 
     const { error } = await supabase
       .from("employees")
-      .update({
-        duty_status: newStatus,
-        is_available: newStatus === "On Duty" ? true : false,
-      })
+      .update(updatePayload)
       .eq("user_id", userId);
 
     if (error) {
       console.error("Error updating duty status:", error);
       alert("Failed to update status: " + error.message);
+      // Revert optimistic UI on error
       setDutyStatus(previousStatus);
+      setDutyStartTime(previousStart);
+      setDutyEndTime(previousEnd);
     } else {
-      // NEW: Log the shift change for Admins to see!
       try {
         const action = newStatus === "On Duty" ? "DUTY_STARTED" : "DUTY_ENDED";
         const details =
@@ -172,73 +194,7 @@ function LinemanDashboard() {
         </div>
       )}
 
-      {/* --- GLOBAL DUTY STATUS BANNER --- */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "12px 20px",
-          backgroundColor:
-            dutyStatus === "On Duty"
-              ? "#16a34a"
-              : dutyStatus === "Loading..."
-                ? "#94a3b8"
-                : "#ef4444",
-          color: "white",
-          boxShadow: "0 4px 10px rgba(0, 0, 0, 0.15)",
-          zIndex: 100,
-          flexShrink: 0,
-          transition: "background-color 0.3s ease",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <Power size={20} />
-          <span
-            style={{
-              fontWeight: "900",
-              fontSize: "0.95rem",
-              letterSpacing: "0.5px",
-            }}
-          >
-            {!hasEmployeeRow
-              ? "NO PROFILE"
-              : dutyStatus === "On Duty"
-                ? "ON DUTY"
-                : dutyStatus === "Loading..."
-                  ? "LOADING..."
-                  : "OFF DUTY"}
-          </span>
-        </div>
-
-        <button
-          onClick={handleDutyClick} // Changed to the new handler!
-          disabled={dutyStatus === "Loading..." || !hasEmployeeRow}
-          style={{
-            backgroundColor: "white",
-            color: dutyStatus === "On Duty" ? "#16a34a" : "#ef4444",
-            border: "none",
-            padding: "8px 16px",
-            borderRadius: "50px",
-            fontWeight: "900",
-            fontSize: "0.75rem",
-            cursor:
-              dutyStatus === "Loading..." || !hasEmployeeRow
-                ? "not-allowed"
-                : "pointer",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-            textTransform: "uppercase",
-            transition: "transform 0.1s ease",
-            opacity: dutyStatus === "Loading..." || !hasEmployeeRow ? 0.7 : 1,
-          }}
-          onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.95)")}
-          onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-        >
-          {dutyStatus === "On Duty" ? "Go Off Duty" : "Start Duty"}
-        </button>
-      </div>
-
-      {/* Middle Wrapper (handles the scrolling perfectly) */}
+      {/* Middle Wrapper */}
       <div
         key={activeTab}
         className="animate-tab-switch l-rt-tab"
@@ -249,7 +205,16 @@ function LinemanDashboard() {
           paddingBottom: "80px",
         }}
       >
-        {activeTab === "report" && <ReportTab />}
+        {/* UPDATED: Pass timestamps to the Report Tab! */}
+        {activeTab === "report" && (
+          <ReportTab
+            dutyStatus={dutyStatus}
+            onDutyToggle={handleDutyClick}
+            hasEmployeeRow={hasEmployeeRow}
+            dutyStartTime={dutyStartTime}
+            dutyEndTime={dutyEndTime}
+          />
+        )}
         {activeTab === "history" && <HistoryTab />}
         {activeTab === "notification" && <NotificationTab />}
         {activeTab === "profile" && <ProfileTab />}

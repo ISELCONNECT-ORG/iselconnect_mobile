@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import LinemanReportDetail from "./LinemanReportDetail";
 import { translations } from "../components/translations";
+import { Power } from "lucide-react";
 
 const priorityWeight = {
   Critical: 4,
@@ -25,7 +26,14 @@ const getPriorityColor = (level) => {
   }
 };
 
-function LinemanReportTab() {
+// UPDATED: Destructure the new timestamp props
+function LinemanReportTab({
+  dutyStatus,
+  onDutyToggle,
+  hasEmployeeRow,
+  dutyStartTime,
+  dutyEndTime,
+}) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
   const t = translations[currentLang];
 
@@ -102,6 +110,17 @@ function LinemanReportTab() {
       .join(", ");
   };
 
+  // Helper to format the time beautifully (e.g. "8:30 AM")
+  const formatTime = (isoString) => {
+    if (!isoString) return "";
+    const d = new Date(isoString);
+    return d.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
   const activeAssignedReports = assignedReports.filter(
     (r) => r.report_statuses?.name?.toUpperCase() !== "RESOLVED",
   );
@@ -148,14 +167,91 @@ function LinemanReportTab() {
           WebkitBackdropFilter: "blur(12px)",
           zIndex: 50,
           borderBottom: "1px solid rgba(0,0,0,0.05)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
         }}
       >
-        <p className="l-rt-greeting" style={{ margin: 0 }}>
-          {t.hello}
-        </p>
-        <h2 className="l-rt-name" style={{ margin: 0 }}>
-          {linemanName || "Lineman"}
-        </h2>
+        <div>
+          <p className="l-rt-greeting" style={{ margin: 0 }}>
+            {t.hello}
+          </p>
+          <h2 className="l-rt-name" style={{ margin: 0, lineHeight: 1.1 }}>
+            {linemanName || "Lineman"}
+          </h2>
+
+          {/* NEW TIMESTAMP DISPLAY */}
+          <div
+            style={{
+              marginTop: "4px",
+              fontSize: "0.75rem",
+              color: "#64748b",
+              fontWeight: "700",
+            }}
+          >
+            {dutyStatus === "On Duty" && dutyStartTime && (
+              <span>
+                Started:{" "}
+                <span style={{ color: "#16a34a" }}>
+                  {formatTime(dutyStartTime)}
+                </span>
+              </span>
+            )}
+            {dutyStatus === "Off Duty" && dutyEndTime && (
+              <span>
+                Ended:{" "}
+                <span style={{ color: "#ef4444" }}>
+                  {formatTime(dutyEndTime)}
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {dutyStatus && (
+          <button
+            onClick={onDutyToggle}
+            disabled={dutyStatus === "Loading..." || !hasEmployeeRow}
+            style={{
+              backgroundColor:
+                dutyStatus === "On Duty"
+                  ? "#16a34a"
+                  : dutyStatus === "Loading..."
+                    ? "#94a3b8"
+                    : "#ef4444",
+              color: "white",
+              border: "none",
+              padding: "8px 16px",
+              borderRadius: "50px",
+              fontWeight: "900",
+              fontSize: "0.75rem",
+              cursor:
+                dutyStatus === "Loading..." || !hasEmployeeRow
+                  ? "not-allowed"
+                  : "pointer",
+              boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
+              textTransform: "uppercase",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              transition: "transform 0.1s ease, background-color 0.3s ease",
+              opacity: dutyStatus === "Loading..." || !hasEmployeeRow ? 0.7 : 1,
+            }}
+            onMouseDown={(e) =>
+              (e.currentTarget.style.transform = "scale(0.95)")
+            }
+            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          >
+            <Power size={14} strokeWidth={3} />
+            {!hasEmployeeRow
+              ? "NO PROFILE"
+              : dutyStatus === "On Duty"
+                ? "ON DUTY"
+                : dutyStatus === "Loading..."
+                  ? "LOADING"
+                  : "OFF DUTY"}
+          </button>
+        )}
       </div>
 
       <div
@@ -285,7 +381,6 @@ function LinemanReportTab() {
                   ? t.inProgress
                   : statusName;
 
-            // EXACT BADGE STYLES FROM RESIDENT TAB
             let badgeBg = "#f1f5f9",
               badgeColor = "#475569",
               badgeBorder = "#cbd5e1";

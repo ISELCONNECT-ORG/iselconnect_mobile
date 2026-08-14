@@ -241,19 +241,6 @@ function LinemanHistoryTab() {
               >
                 <div
                   style={{
-                    position: "absolute",
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: "6px",
-                    backgroundColor: getPriorityColor(
-                      report.report_types?.priority_level,
-                    ),
-                  }}
-                />
-                <div
-                  style={{
-                    paddingLeft: "6px",
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "center",
@@ -309,7 +296,7 @@ function LinemanHistoryTab() {
                     color: "#16a34a",
                     border: "1px solid #bbf7d0",
                     padding: "6px 12px",
-                    borderRadius: "20px",
+                    borderRadius: "50px",
                     fontSize: "0.7rem",
                     fontWeight: "900",
                     letterSpacing: "0.5px",
@@ -345,19 +332,7 @@ function LinemanHistoryTab() {
                 boxSizing: "border-box",
               }}
             >
-              <div
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: "6px",
-                  backgroundColor: getPriorityColor(
-                    report.report_types?.priority_level,
-                  ),
-                }}
-              />
-              <div style={{ paddingLeft: "6px" }}>
+              <div>
                 <span
                   style={{
                     color: getPriorityColor(

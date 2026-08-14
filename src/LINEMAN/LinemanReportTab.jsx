@@ -136,6 +136,7 @@ function LinemanReportTab() {
         minHeight: "100%",
       }}
     >
+      {/* STICKY HEADER */}
       <div
         style={{
           position: "sticky",
@@ -318,23 +319,8 @@ function LinemanReportTab() {
                   boxSizing: "border-box",
                 }}
               >
-                {/* Rounded Absolute Line */}
                 <div
                   style={{
-                    position: "absolute",
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: "6px",
-                    backgroundColor: getPriorityColor(
-                      report.report_types?.priority_level,
-                    ),
-                  }}
-                />
-
-                <div
-                  style={{
-                    paddingLeft: "6px",
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "center",

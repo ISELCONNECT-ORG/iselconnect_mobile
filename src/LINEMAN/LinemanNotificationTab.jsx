@@ -76,8 +76,8 @@ function LinemanNotificationTab() {
         }}
       >
         <h2
-          className="text-navy"
           style={{
+            color: "#1b0b8c",
             margin: 0,
             fontSize: "1.8rem",
             fontWeight: "900",
@@ -90,7 +90,6 @@ function LinemanNotificationTab() {
       </div>
 
       <div
-        className="notification-list"
         style={{
           display: "flex",
           flexDirection: "column",
@@ -125,28 +124,18 @@ function LinemanNotificationTab() {
               style={{
                 backgroundColor: "#ffffff",
                 borderRadius: "16px",
-                padding: "16px 20px",
+                padding: "16px",
                 margin: 0,
                 boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
                 position: "relative",
                 overflow: "hidden",
                 border: "1px solid #f1f5f9",
                 opacity: notif.is_read ? 0.75 : 1,
+                width: "100%",
+                boxSizing: "border-box",
               }}
             >
-              {/* Rounded Absolute Line */}
-              <div
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: "6px",
-                  backgroundColor: notif.is_read ? "#cbd5e1" : "#f5c400",
-                }}
-              />
-
-              <div style={{ paddingLeft: "6px" }}>
+              <div>
                 <div
                   style={{
                     display: "flex",

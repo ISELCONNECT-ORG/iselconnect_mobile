@@ -22,6 +22,38 @@ function App() {
 
   const isDevRoute = window.location.pathname === "/dev-lineman-signup";
 
+  // --- HEARTBEAT TRACKER EFFECT ---
+  // Keeps the user marked as 'Active' in the database while the app is open
+  useEffect(() => {
+    let intervalId;
+
+    const pingActivity = async () => {
+      // 1. Check if there is a logged-in user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 2. Update their active status and timestamp
+      await supabase
+        .from("users")
+        .update({
+          is_active: true,
+          last_active_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+    };
+
+    // Ping immediately when the component loads
+    pingActivity();
+
+    // Set up the heartbeat to ping every 5 minutes (300,000 milliseconds)
+    intervalId = setInterval(pingActivity, 300000);
+
+    // Cleanup the interval if the user logs out or the component unmounts
+    return () => clearInterval(intervalId);
+  }, []);
+
   // --- NETWORK TRACKER EFFECT ---
   useEffect(() => {
     // Check initial status when app opens

@@ -12,10 +12,12 @@ import {
   Check,
   Users,
   Trash2,
+  Star,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
 import { translations } from "../components/translations";
+import SatisfactionSurveyModal from "./SatisfactionSurveyModal";
 
 function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
@@ -26,6 +28,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const [isEditing, setIsEditing] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [showRateModal, setShowRateModal] = useState(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -43,6 +46,10 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const statusName = report.report_statuses?.name?.toUpperCase() || "PENDING";
   const isPending = statusName === "PENDING";
   const isInProgress = statusName === "IN PROGRESS";
+  const isResolved = ["RESOLVED", "APPROVED", "ADMIN VERIFIED"].includes(
+    statusName,
+  );
+  const hasRated = report.report_ratings && report.report_ratings.length > 0;
 
   const showMapButton = isPending || isInProgress;
 
@@ -354,7 +361,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
     }
   };
 
-  // DELETE REPORT FUNCTION
   const handleDeleteReport = async () => {
     setLoading(true);
     try {
@@ -401,8 +407,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   let currentStep = 1;
   if (statusName === "IN PROGRESS") currentStep = 2;
   if (statusName === "PENDING VERIFICATION") currentStep = 3;
-  if (["RESOLVED", "APPROVED", "ADMIN VERIFIED"].includes(statusName))
-    currentStep = 4;
+  if (isResolved) currentStep = 4;
 
   const timelineSteps = [
     { label: "Pending", ...formatTimelineDate(report.created_at) },
@@ -558,6 +563,18 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
 
   return (
     <div className="detail-layout">
+      {/* 🌟 RATE EXPERIENCE MODAL */}
+      {showRateModal && (
+        <SatisfactionSurveyModal
+          report={report}
+          onClose={() => setShowRateModal(false)}
+          onSuccess={() => {
+            setShowRateModal(false);
+            if (onReportUpdated) onReportUpdated();
+          }}
+        />
+      )}
+
       {showSuccessModal && (
         <div className="success-modal-overlay">
           <div className="success-modal-box">
@@ -656,7 +673,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
             className="success-modal-box"
             style={{ borderTop: "6px solid #dc2626" }}
           >
-            {/* UPDATED: Added backgroundColor: "#ffffff" */}
             <div
               className="success-modal-header"
               style={{
@@ -1153,6 +1169,42 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                     className="rrd-evidence-img"
                   />
                 </div>
+              )}
+
+              {/* 🌟 RATE EXPERIENCE BUTTON (Visible if Resolved & Not yet rated) */}
+              {isResolved && !hasRated && (
+                <button
+                  onClick={() => setShowRateModal(true)}
+                  style={{
+                    width: "100%",
+                    backgroundColor: "#facc15",
+                    color: "#1b0b8c",
+                    border: "none",
+                    padding: "14px 20px",
+                    borderRadius: "50px",
+                    fontWeight: "900",
+                    fontSize: "0.95rem",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    gap: "8px",
+                    cursor: "pointer",
+                    boxShadow: "0 6px 15px rgba(250, 204, 21, 0.35)",
+                    marginTop: "20px",
+                    transition: "transform 0.1s ease",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                  onMouseDown={(e) =>
+                    (e.currentTarget.style.transform = "scale(0.97)")
+                  }
+                  onMouseUp={(e) =>
+                    (e.currentTarget.style.transform = "scale(1)")
+                  }
+                >
+                  <Star size={20} fill="#1b0b8c" color="#1b0b8c" />
+                  Rate Experience
+                </button>
               )}
             </div>
           )}

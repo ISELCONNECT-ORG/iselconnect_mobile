@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Star, X, CheckCircle, MessageSquare } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -9,6 +10,20 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
   const [feedback, setFeedback] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  // Lock both the body and HTML to prevent native scrolling
+  useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, []);
 
   const handleSubmit = async () => {
     if (rating === 0) return setError("Please select a star rating.");
@@ -39,71 +54,95 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
     }
   };
 
-  return (
+  // NEW: Saves the dismissal to sessionStorage so it doesn't reappear this session
+  const handleDismiss = () => {
+    sessionStorage.setItem(`skip_rating_${report.id}`, "true");
+    onClose();
+  };
+
+  return createPortal(
     <div
+      onTouchMove={(e) => e.stopPropagation()}
+      onWheel={(e) => e.stopPropagation()}
       style={{
         position: "fixed",
         top: 0,
         left: 0,
-        width: "100vw",
-        height: "100vh",
-        backgroundColor: "rgba(0, 0, 0, 0.7)",
-        zIndex: 999999,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.75)",
+        zIndex: 9999999,
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
         animation: "fadeIn 0.3s",
+        touchAction: "none",
       }}
     >
+      <style>{`
+        body * {
+          overscroll-behavior: none !important;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+
       <div
+        onTouchMove={(e) => e.stopPropagation()}
         style={{
           backgroundColor: "#f8fafc",
           width: "90%",
-          maxWidth: "400px",
-          borderRadius: "25px",
+          maxWidth: "380px",
+          borderRadius: "20px",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          boxShadow:
-            "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+          boxShadow: "0 20px 40px rgba(0, 0, 0, 0.3)",
+          touchAction: "auto",
         }}
       >
         <div
           style={{
             backgroundColor: "#1b0b8c",
-            padding: "20px",
+            padding: "16px 20px",
             position: "relative",
             textAlign: "center",
           }}
         >
           <button
-            onClick={onClose}
+            onClick={handleDismiss} // Updated to use handleDismiss
             style={{
               position: "absolute",
-              top: "15px",
-              right: "15px",
+              top: "12px",
+              right: "12px",
               background: "none",
               border: "none",
               cursor: "pointer",
               color: "#fff",
+              opacity: 0.8,
+              transition: "opacity 0.2s",
             }}
+            onMouseOver={(e) => (e.currentTarget.style.opacity = 1)}
+            onMouseOut={(e) => (e.currentTarget.style.opacity = 0.8)}
           >
-            <X size={24} />
+            <X size={22} strokeWidth={2.5} />
           </button>
           <div
             style={{
               display: "flex",
               justifyContent: "center",
-              marginBottom: "10px",
+              marginBottom: "8px",
             }}
           >
-            <CheckCircle size={40} color="#4ade80" />
+            <CheckCircle size={36} color="#4ade80" strokeWidth={2.5} />
           </div>
           <h2
             style={{
               color: "#fff",
               margin: 0,
-              fontSize: "1.2rem",
+              fontSize: "1.15rem",
               fontWeight: "900",
               textTransform: "uppercase",
               letterSpacing: "1px",
@@ -115,10 +154,10 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
 
         <div
           style={{
-            padding: "20px",
+            padding: "16px",
             display: "flex",
             flexDirection: "column",
-            gap: "15px",
+            gap: "12px",
             maxHeight: "70vh",
             overflowY: "auto",
           }}
@@ -127,18 +166,19 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
             style={{
               backgroundColor: "#ffffff",
               border: "1px solid #e2e8f0",
-              borderRadius: "15px",
-              padding: "15px",
-              boxShadow: "0 4px 6px rgba(0,0,0,0.02)",
+              borderRadius: "14px",
+              padding: "12px",
+              boxShadow: "0 4px 10px rgba(0,0,0,0.03)",
             }}
           >
             <h3
               style={{
-                margin: "0 0 10px 0",
-                fontSize: "0.9rem",
+                margin: "0 0 8px 0",
+                fontSize: "0.85rem",
                 color: "#64748b",
                 textTransform: "uppercase",
                 fontWeight: "900",
+                letterSpacing: "0.5px",
               }}
             >
               Lineman's Report:
@@ -148,16 +188,22 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
               <div
                 style={{
                   width: "100%",
-                  height: "150px",
+                  height: "130px",
                   borderRadius: "10px",
                   overflow: "hidden",
-                  marginBottom: "10px",
+                  marginBottom: "8px",
+                  backgroundColor: "#f1f5f9",
                 }}
               >
                 <img
                   src={report.resolved_photo_url}
                   alt="Resolution"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
                 />
               </div>
             )}
@@ -168,13 +214,14 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
                   display: "flex",
                   gap: "10px",
                   alignItems: "flex-start",
-                  backgroundColor: "#f1f5f9",
-                  padding: "12px",
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #f1f5f9",
+                  padding: "10px",
                   borderRadius: "10px",
                 }}
               >
                 <MessageSquare
-                  size={18}
+                  size={16}
                   color="#1b0b8c"
                   style={{ flexShrink: 0, marginTop: "2px" }}
                 />
@@ -184,7 +231,8 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
                     fontSize: "0.85rem",
                     color: "#334155",
                     fontStyle: "italic",
-                    lineHeight: "1.5",
+                    lineHeight: "1.4",
+                    fontWeight: "500",
                   }}
                 >
                   "{report.remarks}"
@@ -197,22 +245,23 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
             <div
               style={{
                 backgroundColor: "#fee2e2",
-                color: "#ef4444",
+                color: "#dc2626",
+                border: "1px solid #fecaca",
                 padding: "10px",
                 borderRadius: "10px",
                 textAlign: "center",
-                fontWeight: "bold",
-                fontSize: "0.85rem",
+                fontWeight: "700",
+                fontSize: "0.8rem",
               }}
             >
               {error}
             </div>
           )}
 
-          <div style={{ textAlign: "center", marginTop: "10px" }}>
+          <div style={{ textAlign: "center", marginTop: "0px" }}>
             <h3
               style={{
-                margin: "0 0 10px 0",
+                margin: "0 0 8px 0",
                 fontSize: "1rem",
                 color: "#1e293b",
                 fontWeight: "900",
@@ -225,7 +274,7 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
                 display: "flex",
                 justifyContent: "center",
                 gap: "8px",
-                marginBottom: "15px",
+                marginBottom: "12px",
               }}
             >
               {[1, 2, 3, 4, 5].map((star) => (
@@ -237,14 +286,20 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
                     border: "none",
                     cursor: "pointer",
                     padding: 0,
-                    transition: "transform 0.1s",
+                    transition: "transform 0.1s ease",
                   }}
                   onMouseEnter={() => setHoverRating(star)}
                   onMouseLeave={() => setHoverRating(0)}
                   onClick={() => setRating(star)}
+                  onMouseDown={(e) =>
+                    (e.currentTarget.style.transform = "scale(0.85)")
+                  }
+                  onMouseUp={(e) =>
+                    (e.currentTarget.style.transform = "scale(1)")
+                  }
                 >
                   <Star
-                    size={40}
+                    size={36}
                     fill={
                       (hoverRating || rating) >= star
                         ? "#facc15"
@@ -262,17 +317,29 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
             <textarea
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
-              placeholder="Leave a comment or feedback (Optional)"
+              placeholder="Leave a comment (Optional)"
               style={{
                 width: "100%",
-                height: "80px",
+                height: "75px",
                 padding: "12px",
                 borderRadius: "12px",
-                border: "1px solid #cbd5e1",
-                fontSize: "0.9rem",
+                border: "2px solid #e2e8f0",
+                backgroundColor: "#ffffff",
+                color: "#1e293b",
+                fontSize: "0.85rem",
                 resize: "none",
                 boxSizing: "border-box",
                 fontFamily: "inherit",
+                outline: "none",
+                transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "#1b0b8c";
+                e.target.style.boxShadow = "0 0 0 3px rgba(27, 11, 140, 0.1)";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "#e2e8f0";
+                e.target.style.boxShadow = "none";
               }}
             />
           </div>
@@ -284,29 +351,48 @@ function SatisfactionSurveyModal({ report, onClose, onSuccess }) {
               width: "100%",
               backgroundColor: "#1b0b8c",
               color: "#fff",
-              padding: "15px",
-              borderRadius: "30px",
+              padding: "12px",
+              borderRadius: "50px",
               fontWeight: "900",
-              fontSize: "1rem",
+              fontSize: "0.95rem",
               border: "none",
               cursor: isSubmitting ? "not-allowed" : "pointer",
               opacity: isSubmitting ? 0.7 : 1,
               textTransform: "uppercase",
-              marginTop: "5px",
+              marginTop: "0px",
+              boxShadow: "0 6px 15px rgba(27, 11, 140, 0.2)",
+              transition: "transform 0.1s ease",
             }}
+            onMouseDown={(e) =>
+              !isSubmitting && (e.currentTarget.style.transform = "scale(0.97)")
+            }
+            onMouseUp={(e) =>
+              !isSubmitting && (e.currentTarget.style.transform = "scale(1)")
+            }
           >
             {isSubmitting ? "Submitting..." : "Submit Rating"}
           </button>
+
+          {/* NEW: Explicit Skip Button */}
+          <button
+            onClick={handleDismiss}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#64748b",
+              fontSize: "0.85rem",
+              fontWeight: "700",
+              marginTop: "4px",
+              cursor: "pointer",
+              textDecoration: "underline",
+            }}
+          >
+            Skip for now
+          </button>
         </div>
       </div>
-
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-      `}</style>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

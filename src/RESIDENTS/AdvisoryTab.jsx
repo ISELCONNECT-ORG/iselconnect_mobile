@@ -145,11 +145,15 @@ function AdvisoryTab() {
               <div
                 style={{
                   backgroundColor: "#ffffff",
-                  borderLeft: "6px solid #facc15",
                   borderRadius: "15px",
                   padding: "16px",
                   marginBottom: "15px",
                   boxShadow: "0 4px 10px rgba(0,0,0,0.03)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  textAlign: "center",
                 }}
               >
                 <h3

@@ -56,7 +56,8 @@ function HomeTab() {
             (r.report_statuses?.name?.toUpperCase() === "RESOLVED" ||
               r.report_statuses?.name?.toUpperCase() === "APPROVED" ||
               r.report_statuses?.name?.toUpperCase() === "ADMIN VERIFIED") &&
-            (!r.report_ratings || r.report_ratings.length === 0),
+            (!r.report_ratings || r.report_ratings.length === 0) &&
+            !sessionStorage.getItem(`skip_rating_${r.id}`),
         );
 
         if (unratedReport) {
@@ -114,15 +115,31 @@ function HomeTab() {
       status === "APPROVED" ||
       status === "ADMIN VERIFIED"
     ) {
-      return { bg: "#f0fdf4", border: "#bbf7d0", text: "#16a34a" };
+      return {
+        bg: "rgba(240, 253, 244, 0.8)",
+        border: "#bbf7d0",
+        text: "#16a34a",
+      };
     }
     if (status === "IN PROGRESS" || status === "PENDING VERIFICATION") {
-      return { bg: "#f0f9ff", border: "#bae6fd", text: "#0284c7" };
+      return {
+        bg: "rgba(240, 249, 255, 0.8)",
+        border: "#bae6fd",
+        text: "#0284c7",
+      };
     }
     if (status === "REJECTED") {
-      return { bg: "#fef2f2", border: "#fecaca", text: "#dc2626" };
+      return {
+        bg: "rgba(254, 242, 242, 0.8)",
+        border: "#fecaca",
+        text: "#dc2626",
+      };
     }
-    return { bg: "#fffbeb", border: "#fef08a", text: "#ca8a04" };
+    return {
+      bg: "rgba(255, 251, 235, 0.8)",
+      border: "#fef08a",
+      text: "#ca8a04",
+    };
   };
 
   const pendingCount = userReports.filter((r) => {
@@ -207,14 +224,20 @@ function HomeTab() {
         />
       )}
 
+      {/* LIQUID GLASS CONTAINER WITH SUBTLE MESH GRADIENT */}
       <div
         style={{
-          padding: "30px 20px 100px 20px",
+          padding: "30px 20px 120px 20px",
           display: "flex",
           flexDirection: "column",
-          gap: "30px",
+          gap: "25px",
+          minHeight: "100%",
+          boxSizing: "border-box",
+          background:
+            "linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #eff6ff 100%)",
         }}
       >
+        {/* HEADER SECTION */}
         <div
           style={{
             display: "flex",
@@ -226,7 +249,7 @@ function HomeTab() {
             <p
               style={{
                 margin: 0,
-                fontSize: "1rem",
+                fontSize: "0.95rem",
                 color: "#64748b",
                 fontWeight: "700",
               }}
@@ -236,7 +259,7 @@ function HomeTab() {
             <h2
               style={{
                 margin: 0,
-                fontSize: "1.8rem",
+                fontSize: "1.7rem",
                 fontWeight: "900",
                 color: "#1b0b8c",
                 lineHeight: "1.1",
@@ -245,26 +268,33 @@ function HomeTab() {
               {userName || "Resident"}
             </h2>
           </div>
+
+          {/* LIQUID GLASS EMERGENCY BUTTON */}
           <button
             onClick={() => setShowHotlines(true)}
             style={{
-              border: "1.5px solid #1b0b8c",
-              backgroundColor: "transparent",
+              border: "1px solid rgba(27, 11, 140, 0.2)",
+              backgroundColor: "rgba(255, 255, 255, 0.65)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
               color: "#1b0b8c",
               fontWeight: "900",
-              fontSize: "0.7rem",
-              padding: "10px 16px",
+              fontSize: "0.68rem",
+              padding: "10px 14px",
               borderRadius: "50px",
               cursor: "pointer",
               textAlign: "center",
               lineHeight: "1.3",
+              boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.08)",
               transition: "all 0.2s ease",
             }}
             onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = "rgba(27, 11, 140, 0.05)";
+              e.currentTarget.style.backgroundColor =
+                "rgba(255, 255, 255, 0.85)";
             }}
             onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.backgroundColor =
+                "rgba(255, 255, 255, 0.65)";
             }}
           >
             EMERGENCY
@@ -273,29 +303,34 @@ function HomeTab() {
           </button>
         </div>
 
+        {/* LIQUID GLASS SUMMARY CARDS GRID */}
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
-            gap: "12px",
+            gap: "14px",
           }}
         >
+          {/* PENDING CARD */}
           <div
             onClick={() => handleFilterClick("PENDING")}
             style={{
-              backgroundColor: "#fffbeb",
-              border: "1px solid #fef08a",
-              borderRadius: "16px",
-              padding: "16px 8px",
+              backgroundColor: "rgba(255, 251, 235, 0.7)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              border: "1px solid rgba(254, 240, 138, 0.6)",
+              borderRadius: "20px",
+              padding: "16px 10px",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
               opacity:
-                filterStatus === "ALL" || filterStatus === "PENDING" ? 1 : 0.4,
+                filterStatus === "ALL" || filterStatus === "PENDING" ? 1 : 0.45,
               transform:
-                filterStatus === "PENDING" ? "scale(1.05)" : "scale(1)",
+                filterStatus === "PENDING" ? "scale(1.03)" : "scale(1)",
+              boxShadow: "0 8px 32px 0 rgba(202, 138, 4, 0.08)",
               transition: "all 0.2s ease",
             }}
           >
@@ -303,7 +338,7 @@ function HomeTab() {
             <h3
               style={{
                 margin: 0,
-                fontSize: "1.8rem",
+                fontSize: "1.7rem",
                 color: "#ca8a04",
                 fontWeight: "900",
                 lineHeight: "1",
@@ -323,13 +358,16 @@ function HomeTab() {
             </p>
           </div>
 
+          {/* IN PROGRESS CARD */}
           <div
             onClick={() => handleFilterClick("IN PROGRESS")}
             style={{
-              backgroundColor: "#f0f9ff",
-              border: "1px solid #bae6fd",
-              borderRadius: "16px",
-              padding: "16px 8px",
+              backgroundColor: "rgba(240, 249, 255, 0.7)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              border: "1px solid rgba(186, 230, 253, 0.6)",
+              borderRadius: "20px",
+              padding: "16px 10px",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -338,9 +376,10 @@ function HomeTab() {
               opacity:
                 filterStatus === "ALL" || filterStatus === "IN PROGRESS"
                   ? 1
-                  : 0.4,
+                  : 0.45,
               transform:
-                filterStatus === "IN PROGRESS" ? "scale(1.05)" : "scale(1)",
+                filterStatus === "IN PROGRESS" ? "scale(1.03)" : "scale(1)",
+              boxShadow: "0 8px 32px 0 rgba(2, 132, 199, 0.08)",
               transition: "all 0.2s ease",
             }}
           >
@@ -348,7 +387,7 @@ function HomeTab() {
             <h3
               style={{
                 margin: 0,
-                fontSize: "1.8rem",
+                fontSize: "1.7rem",
                 color: "#0284c7",
                 fontWeight: "900",
                 lineHeight: "1",
@@ -368,22 +407,28 @@ function HomeTab() {
             </p>
           </div>
 
+          {/* RESOLVED CARD */}
           <div
             onClick={() => handleFilterClick("RESOLVED")}
             style={{
-              backgroundColor: "#f0fdf4",
-              border: "1px solid #bbf7d0",
-              borderRadius: "16px",
-              padding: "16px 8px",
+              backgroundColor: "rgba(240, 253, 244, 0.7)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              border: "1px solid rgba(187, 247, 208, 0.6)",
+              borderRadius: "20px",
+              padding: "16px 10px",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
               opacity:
-                filterStatus === "ALL" || filterStatus === "RESOLVED" ? 1 : 0.4,
+                filterStatus === "ALL" || filterStatus === "RESOLVED"
+                  ? 1
+                  : 0.45,
               transform:
-                filterStatus === "RESOLVED" ? "scale(1.05)" : "scale(1)",
+                filterStatus === "RESOLVED" ? "scale(1.03)" : "scale(1)",
+              boxShadow: "0 8px 32px 0 rgba(22, 163, 74, 0.08)",
               transition: "all 0.2s ease",
             }}
           >
@@ -395,7 +440,7 @@ function HomeTab() {
             <h3
               style={{
                 margin: 0,
-                fontSize: "1.8rem",
+                fontSize: "1.7rem",
                 color: "#16a34a",
                 fontWeight: "900",
                 lineHeight: "1",
@@ -415,22 +460,28 @@ function HomeTab() {
             </p>
           </div>
 
+          {/* REJECTED CARD */}
           <div
             onClick={() => handleFilterClick("REJECTED")}
             style={{
-              backgroundColor: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: "16px",
-              padding: "16px 8px",
+              backgroundColor: "rgba(254, 242, 242, 0.7)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              border: "1px solid rgba(254, 202, 202, 0.6)",
+              borderRadius: "20px",
+              padding: "16px 10px",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
               opacity:
-                filterStatus === "ALL" || filterStatus === "REJECTED" ? 1 : 0.4,
+                filterStatus === "ALL" || filterStatus === "REJECTED"
+                  ? 1
+                  : 0.45,
               transform:
-                filterStatus === "REJECTED" ? "scale(1.05)" : "scale(1)",
+                filterStatus === "REJECTED" ? "scale(1.03)" : "scale(1)",
+              boxShadow: "0 8px 32px 0 rgba(220, 38, 38, 0.08)",
               transition: "all 0.2s ease",
             }}
           >
@@ -442,7 +493,7 @@ function HomeTab() {
             <h3
               style={{
                 margin: 0,
-                fontSize: "1.8rem",
+                fontSize: "1.7rem",
                 color: "#dc2626",
                 fontWeight: "900",
                 lineHeight: "1",
@@ -463,6 +514,7 @@ function HomeTab() {
           </div>
         </div>
 
+        {/* REPORTS LIST SECTION */}
         <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
           <div
             style={{
@@ -474,12 +526,12 @@ function HomeTab() {
             <h2
               style={{
                 margin: 0,
-                fontSize: "1.6rem",
+                fontSize: "1.5rem",
                 fontWeight: "900",
                 letterSpacing: "0.5px",
               }}
             >
-              <span style={{ color: "#facc15" }}>REPORT</span>{" "}
+              <span style={{ color: "#ca8a04" }}>REPORT</span>{" "}
               <span style={{ color: "#1b0b8c" }}>STATUS</span>
             </h2>
 
@@ -511,6 +563,7 @@ function HomeTab() {
                   textAlign: "center",
                   color: "#1b0b8c",
                   fontWeight: "bold",
+                  padding: "20px 0",
                 }}
               >
                 Loading your reports...
@@ -539,18 +592,27 @@ function HomeTab() {
                   key={report.id}
                   onClick={() => setSelectedReport(report)}
                   style={{
-                    backgroundColor: "#ffffff",
-                    borderRadius: "16px",
+                    backgroundColor: "rgba(255, 255, 255, 0.75)",
+                    backdropFilter: "blur(16px)",
+                    WebkitBackdropFilter: "blur(16px)",
+                    borderRadius: "20px",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
                     padding: "16px",
                     cursor: "pointer",
-                    boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+                    boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.06)",
                     position: "relative",
                     overflow: "hidden",
-                    border: "1px solid #f1f5f9",
+                    border: "1px solid rgba(255, 255, 255, 0.8)",
+                    transition: "transform 0.15s ease",
                   }}
+                  onMouseDown={(e) =>
+                    (e.currentTarget.style.transform = "scale(0.98)")
+                  }
+                  onMouseUp={(e) =>
+                    (e.currentTarget.style.transform = "scale(1)")
+                  }
                 >
                   <div
                     style={{
@@ -561,7 +623,6 @@ function HomeTab() {
                       paddingRight: "12px",
                     }}
                   >
-                    {/* NEW MINIMAL PRIORITY INDICATOR */}
                     <div
                       style={{
                         display: "flex",
@@ -628,6 +689,8 @@ function HomeTab() {
                       backgroundColor: getBadgeStyle(
                         report.report_statuses?.name,
                       ).bg,
+                      backdropFilter: "blur(8px)",
+                      WebkitBackdropFilter: "blur(8px)",
                       border: `1px solid ${getBadgeStyle(report.report_statuses?.name).border}`,
                       borderRadius: "20px",
                       padding: "6px 12px",

@@ -8,7 +8,6 @@ import {
   Camera as CameraIcon,
   ChevronDown,
   ChevronLeft,
-  AlertTriangle,
   Clock,
   ShieldAlert,
   MapPin,
@@ -175,9 +174,6 @@ function ReportTab({ isActive, onNavigateHome }) {
   });
 
   const webcamRef = useRef(null);
-  const mapContainerRef = useRef(null);
-  const mapRef = useRef(null);
-  const markerRef = useRef(null);
 
   useEffect(() => {
     if (!isActive) {
@@ -499,6 +495,9 @@ function ReportTab({ isActive, onNavigateHome }) {
     }
   };
 
+  // ----------------------------------------------------
+  // VERIFICATION LOADING STATE
+  // ----------------------------------------------------
   if (verificationStatus === "loading") {
     return (
       <div
@@ -518,6 +517,9 @@ function ReportTab({ isActive, onNavigateHome }) {
     );
   }
 
+  // ----------------------------------------------------
+  // ACCOUNT PENDING / REJECTED SCREEN
+  // ----------------------------------------------------
   if (verificationStatus !== "approved") {
     const isRejected = verificationStatus === "rejected";
 
@@ -525,18 +527,16 @@ function ReportTab({ isActive, onNavigateHome }) {
       <div
         className="bg-navy-tab"
         style={{
-          padding: "40px 20px",
-          minHeight: "100vh",
-          boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          overscrollBehavior: "none",
+          minHeight: "100vh",
+          padding: "20px 16px 110px 16px",
+          boxSizing: "border-box",
         }}
       >
         <div
           style={{
+            margin: "auto",
             backgroundColor: "#ffffff",
             borderRadius: "24px",
             padding: "35px 25px",
@@ -693,183 +693,214 @@ function ReportTab({ isActive, onNavigateHome }) {
           document.body,
         )}
 
+      {/* ---------------------------------------------------- */}
+      {/* REPORT GUIDELINES SCREEN */}
+      {/* ---------------------------------------------------- */}
       {!hasAcceptedGuidelines ? (
         <div
           style={{
-            padding: "30px 20px",
             display: "flex",
             flexDirection: "column",
-            gap: "20px",
-            paddingBottom: "120px",
+            minHeight: "100vh",
+            padding: "20px 16px 110px 16px",
+            boxSizing: "border-box",
           }}
         >
-          <h1
-            className="report-title text-yellow"
-            style={{ textAlign: "center", marginBottom: "0" }}
-          >
-            REPORT GUIDELINES
-          </h1>
-          <p
-            style={{
-              color: "#cbd5e1",
-              textAlign: "center",
-              fontSize: "0.9rem",
-              marginTop: "-10px",
-              marginBottom: "5px",
-            }}
-          >
-            Please read carefully to avoid account restrictions.
-          </p>
-
           <div
             style={{
-              backgroundColor: "#ffffff",
-              borderRadius: "20px",
-              padding: "25px 20px",
-              boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+              margin: "auto",
+              width: "100%",
               display: "flex",
               flexDirection: "column",
-              gap: "25px",
+              gap: "10px",
             }}
           >
-            <div
-              style={{ display: "flex", gap: "15px", alignItems: "flex-start" }}
-            >
-              <div
-                style={{
-                  backgroundColor: "#fef3c7",
-                  padding: "10px",
-                  borderRadius: "50%",
-                }}
-              >
-                <MapPin size={24} color="#d97706" />
-              </div>
-              <div>
-                <h3
-                  style={{
-                    margin: "0 0 5px 0",
-                    color: "#1e293b",
-                    fontSize: "1rem",
-                    fontWeight: "900",
-                  }}
-                >
-                  Accurate Location
-                </h3>
-                <p
-                  style={{
-                    margin: 0,
-                    color: "#475569",
-                    fontSize: "0.85rem",
-                    lineHeight: "1.5",
-                  }}
-                >
-                  Ensure your device GPS is turned on before capturing a photo
-                  so linemen can locate the issue precisely.
-                </p>
-              </div>
-            </div>
-
-            <div
-              style={{ display: "flex", gap: "15px", alignItems: "flex-start" }}
-            >
-              <div
-                style={{
-                  backgroundColor: "#e0e7ff",
-                  padding: "10px",
-                  borderRadius: "50%",
-                }}
-              >
-                <CameraIcon size={24} color="#4f46e5" />
-              </div>
-              <div>
-                <h3
-                  style={{
-                    margin: "0 0 5px 0",
-                    color: "#1e293b",
-                    fontSize: "1rem",
-                    fontWeight: "900",
-                  }}
-                >
-                  Clear Evidence
-                </h3>
-                <p
-                  style={{
-                    margin: 0,
-                    color: "#475569",
-                    fontSize: "0.85rem",
-                    lineHeight: "1.5",
-                  }}
-                >
-                  Take a clear, real-time photo of the exact problem (e.g.,
-                  fallen pole, leaning wire, tree touching line).
-                </p>
-              </div>
-            </div>
-
-            <div
-              style={{ display: "flex", gap: "15px", alignItems: "flex-start" }}
-            >
-              <div
-                style={{
-                  backgroundColor: "#fee2e2",
-                  padding: "10px",
-                  borderRadius: "50%",
-                }}
-              >
-                <ShieldAlert size={24} color="#dc2626" />
-              </div>
-              <div>
-                <h3
-                  style={{
-                    margin: "0 0 5px 0",
-                    color: "#1e293b",
-                    fontSize: "1rem",
-                    fontWeight: "900",
-                  }}
-                >
-                  Anti-Spam Policy
-                </h3>
-                <p
-                  style={{
-                    margin: 0,
-                    color: "#475569",
-                    fontSize: "0.85rem",
-                    lineHeight: "1.5",
-                  }}
-                >
-                  Do not submit false, misleading, or prank reports.
-                  Accumulating 5 rejected reports will permanently block your
-                  account.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setHasAcceptedGuidelines(true)}
+            <h1
+              className="report-title text-yellow"
               style={{
-                backgroundColor: "#1b0b8c",
-                color: "#ffffff",
-                border: "none",
-                padding: "16px",
-                borderRadius: "50px",
-                fontWeight: "900",
-                fontSize: "1rem",
-                marginTop: "10px",
-                cursor: "pointer",
-                boxShadow: "0 8px 20px rgba(27, 11, 140, 0.25)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                transition: "transform 0.1s ease",
+                textAlign: "center",
+                marginBottom: "0",
+                fontSize: "1.5rem",
               }}
-              onMouseDown={(e) =>
-                (e.currentTarget.style.transform = "scale(0.97)")
-              }
-              onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
             >
-              <CheckCircle size={20} />I UNDERSTAND & PROCEED
-            </button>
+              REPORT GUIDELINES
+            </h1>
+            <p
+              style={{
+                color: "#cbd5e1",
+                textAlign: "center",
+                fontSize: "0.85rem",
+                marginTop: "-4px",
+                marginBottom: "4px",
+              }}
+            >
+              Please read carefully to avoid account restrictions.
+            </p>
+
+            <div
+              style={{
+                backgroundColor: "#ffffff",
+                borderRadius: "20px",
+                padding: "18px 16px",
+                boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  alignItems: "flex-start",
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: "#fef3c7",
+                    padding: "8px",
+                    borderRadius: "50%",
+                  }}
+                >
+                  <MapPin size={20} color="#d97706" />
+                </div>
+                <div>
+                  <h3
+                    style={{
+                      margin: "0 0 4px 0",
+                      color: "#1e293b",
+                      fontSize: "0.9rem",
+                      fontWeight: "900",
+                    }}
+                  >
+                    Accurate Location
+                  </h3>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#475569",
+                      fontSize: "0.75rem",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    Ensure your device GPS is turned on before capturing a photo
+                    so linemen can locate the issue precisely.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  alignItems: "flex-start",
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: "#e0e7ff",
+                    padding: "8px",
+                    borderRadius: "50%",
+                  }}
+                >
+                  <CameraIcon size={20} color="#4f46e5" />
+                </div>
+                <div>
+                  <h3
+                    style={{
+                      margin: "0 0 4px 0",
+                      color: "#1e293b",
+                      fontSize: "0.9rem",
+                      fontWeight: "900",
+                    }}
+                  >
+                    Clear Evidence
+                  </h3>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#475569",
+                      fontSize: "0.75rem",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    Take a clear, real-time photo of the exact problem (e.g.,
+                    fallen pole, leaning wire, tree touching line).
+                  </p>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  alignItems: "flex-start",
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: "#fee2e2",
+                    padding: "8px",
+                    borderRadius: "50%",
+                  }}
+                >
+                  <ShieldAlert size={20} color="#dc2626" />
+                </div>
+                <div>
+                  <h3
+                    style={{
+                      margin: "0 0 4px 0",
+                      color: "#1e293b",
+                      fontSize: "0.9rem",
+                      fontWeight: "900",
+                    }}
+                  >
+                    Anti-Spam Policy
+                  </h3>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#475569",
+                      fontSize: "0.75rem",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    Do not submit false, misleading, or prank reports.
+                    Accumulating 5 rejected reports will permanently block your
+                    account.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setHasAcceptedGuidelines(true)}
+                style={{
+                  backgroundColor: "#1b0b8c",
+                  color: "#ffffff",
+                  border: "none",
+                  padding: "12px",
+                  borderRadius: "50px",
+                  fontWeight: "900",
+                  fontSize: "0.9rem",
+                  marginTop: "4px",
+                  cursor: "pointer",
+                  boxShadow: "0 8px 20px rgba(27, 11, 140, 0.25)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  transition: "transform 0.1s ease",
+                }}
+                onMouseDown={(e) =>
+                  (e.currentTarget.style.transform = "scale(0.97)")
+                }
+                onMouseUp={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
+              >
+                <CheckCircle size={18} />I UNDERSTAND & PROCEED
+              </button>
+            </div>
           </div>
         </div>
       ) : !isCameraOpen ? (
@@ -892,41 +923,6 @@ function ReportTab({ isActive, onNavigateHome }) {
                 <h2>{t.capturePhoto}</h2>
               </div>
             )}
-          </div>
-
-          <div
-            style={{
-              backgroundColor: "#fef3c7",
-              borderLeft: "5px solid #facc15",
-              padding: "12px 15px",
-              borderRadius: "8px",
-              marginBottom: "20px",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "10px",
-              boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
-            }}
-          >
-            <AlertTriangle
-              size={24}
-              color="#b45309"
-              style={{ flexShrink: 0, marginTop: "2px" }}
-            />
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.85rem",
-                color: "#92400e",
-                lineHeight: "1.5",
-                textAlign: "left",
-              }}
-            >
-              <strong style={{ color: "#b45309", textTransform: "uppercase" }}>
-                {t.noteLabel || "Note:"}
-              </strong>{" "}
-              {t.locationNote ||
-                "Turn on the location of your device before capturing a photo to easily get the Longitude and Latitude location."}
-            </p>
           </div>
 
           {error && (

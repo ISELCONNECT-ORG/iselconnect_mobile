@@ -29,6 +29,10 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
   const t = translations[currentLang];
 
+  // NEW: Refs for scroll fixing
+  const layoutRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -65,6 +69,38 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     activeStatus === "RESOLVED" || activeStatus === "ADMIN VERIFIED";
   const isPendingVerification = activeStatus === "PENDING VERIFICATION";
   const isLocked = isResolved || isPendingVerification;
+
+  // 🌟 FIX: Force parent containers to instantly snap to the top
+  useEffect(() => {
+    const resetScroll = () => {
+      window.scrollTo(0, 0);
+
+      // Forces the parent container to scroll to the top of this layout
+      if (layoutRef.current) {
+        layoutRef.current.scrollIntoView({
+          behavior: "instant",
+          block: "start",
+        });
+      }
+
+      // Resets the internal scrollable box
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+
+      // Explicitly resets the specific CSS classes that act as wrappers
+      const parentTab = document.querySelector(".l-rt-tab");
+      const appContainer = document.querySelector(".lineman-dashboard-layout");
+      if (parentTab) parentTab.scrollTop = 0;
+      if (appContainer) appContainer.scrollTop = 0;
+    };
+
+    resetScroll();
+
+    // Fallback timer just in case React takes a millisecond to finish rendering
+    const timer = setTimeout(resetScroll, 50);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const fetchAssignmentDetails = async () => {
@@ -766,6 +802,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
 
   return (
     <div
+      ref={layoutRef}
       className="detail-layout page-transition"
       style={{ overscrollBehavior: "none" }}
     >
@@ -792,15 +829,16 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
       )}
 
       <div
+        ref={scrollContainerRef}
         className="detail-scrollable-content"
-        style={{ padding: "16px 16px 120px 16px" }}
+        style={{ padding: "16px 16px 180px 16px" }}
       >
         <div
           style={{
             position: "sticky",
             top: 0,
             margin: "-16px -16px 20px -16px",
-            padding: "22px 16px 18px 16px",
+            padding: "calc(20px + env(safe-area-inset-top)) 16px 18px 16px",
             background: "rgba(255, 255, 255, 0.92)",
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",

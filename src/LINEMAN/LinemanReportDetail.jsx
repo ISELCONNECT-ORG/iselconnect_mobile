@@ -29,7 +29,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
   const t = translations[currentLang];
 
-  // NEW: Refs for scroll fixing
   const layoutRef = useRef(null);
   const scrollContainerRef = useRef(null);
 
@@ -70,25 +69,18 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const isPendingVerification = activeStatus === "PENDING VERIFICATION";
   const isLocked = isResolved || isPendingVerification;
 
-  // 🌟 FIX: Force parent containers to instantly snap to the top
   useEffect(() => {
     const resetScroll = () => {
       window.scrollTo(0, 0);
-
-      // Forces the parent container to scroll to the top of this layout
       if (layoutRef.current) {
         layoutRef.current.scrollIntoView({
           behavior: "instant",
           block: "start",
         });
       }
-
-      // Resets the internal scrollable box
       if (scrollContainerRef.current) {
         scrollContainerRef.current.scrollTop = 0;
       }
-
-      // Explicitly resets the specific CSS classes that act as wrappers
       const parentTab = document.querySelector(".l-rt-tab");
       const appContainer = document.querySelector(".lineman-dashboard-layout");
       if (parentTab) parentTab.scrollTop = 0;
@@ -96,8 +88,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     };
 
     resetScroll();
-
-    // Fallback timer just in case React takes a millisecond to finish rendering
     const timer = setTimeout(resetScroll, 50);
     return () => clearTimeout(timer);
   }, []);
@@ -145,7 +135,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     const startNativeTracking = async () => {
       if (activeStatus === "IN PROGRESS" && currentUserId) {
         try {
-          // 1. Initial Native GPS Ping
           const position = await Geolocation.getCurrentPosition({
             enableHighAccuracy: true,
           });
@@ -163,7 +152,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             .eq("report_id", report.id)
             .eq("lineman_id", currentUserId);
 
-          // 2. Start Native Background Watcher
           activeWatchId = await Geolocation.watchPosition(
             { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
             async (pos, err) => {
@@ -387,7 +375,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         .from("report_photos")
         .getPublicUrl(fileName);
 
-      // Status 4 = PENDING VERIFICATION
       const updatePayload = {
         status_id: 4,
         resolved_photo_url: publicUrlData.publicUrl,
@@ -404,7 +391,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
       if (!data || data.length === 0)
         throw new Error("Update blocked by Supabase!");
 
-      // Update the completion_at timestamp in assignments
       await supabase
         .from("assignments")
         .update({ completion_at: new Date().toISOString() })
@@ -804,8 +790,29 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     <div
       ref={layoutRef}
       className="detail-layout page-transition"
-      style={{ overscrollBehavior: "none" }}
+      style={{ overscrollBehavior: "none", backgroundColor: "#f8fafc" }}
     >
+      {/* 🌟 EXPERIMENTAL: Container Transform Style Override */}
+      <style>{`
+        @keyframes containerTransformExp {
+          0% {
+            opacity: 0;
+            transform: scale(0.85) translateY(40px);
+            border-radius: 40px;
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            border-radius: 0;
+          }
+        }
+        
+        .page-transition {
+          animation: containerTransformExp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+          transform-origin: center center;
+        }
+      `}</style>
+
       {showSuccessModal && (
         <div className="success-modal-overlay">
           <div className="success-modal-box">
@@ -839,7 +846,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             top: 0,
             margin: "-16px -16px 20px -16px",
             padding: "calc(20px + env(safe-area-inset-top)) 16px 18px 16px",
-            background: "rgba(255, 255, 255, 0.92)",
+            background: "rgba(248, 250, 252, 0.92)",
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",
             zIndex: 50,

@@ -23,6 +23,10 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
   const t = translations[currentLang];
 
+  // 🌟 NEW: Refs for scroll fixing & animation
+  const layoutRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+
   const [loading, setLoading] = useState(false);
   const [reportTypes, setReportTypes] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -58,6 +62,28 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
     landmark: report.landmark || "",
     description: report.description || "",
   });
+
+  // 🌟 FIX: Force parent containers to instantly snap to the top
+  useEffect(() => {
+    const resetScroll = () => {
+      window.scrollTo(0, 0);
+      if (layoutRef.current) {
+        layoutRef.current.scrollIntoView({
+          behavior: "instant",
+          block: "start",
+        });
+      }
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+      const parentTab = document.querySelector(".rrd-scrollable");
+      if (parentTab) parentTab.scrollTop = 0;
+    };
+
+    resetScroll();
+    const timer = setTimeout(resetScroll, 50);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const fetchAssignmentDetails = async () => {
@@ -193,7 +219,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           zoomControl: false,
         }).setView([lat, lon], 16);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "&copy; OpenStreetMap contributors",
+          attribution: "&copy; OpenStreetMap",
           maxZoom: 19,
         }).addTo(mapRef.current);
       } else {
@@ -562,7 +588,32 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   }
 
   return (
-    <div className="detail-layout">
+    <div
+      ref={layoutRef}
+      className="detail-layout page-transition"
+      style={{ overscrollBehavior: "none", backgroundColor: "#f8fafc" }}
+    >
+      {/* 🌟 EXPERIMENTAL: Container Transform Style Override */}
+      <style>{`
+        @keyframes containerTransformExp {
+          0% {
+            opacity: 0;
+            transform: scale(0.85) translateY(40px);
+            border-radius: 40px;
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            border-radius: 0;
+          }
+        }
+        
+        .page-transition {
+          animation: containerTransformExp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+          transform-origin: center center;
+        }
+      `}</style>
+
       {/* 🌟 RATE EXPERIENCE MODAL */}
       {showRateModal && (
         <SatisfactionSurveyModal
@@ -716,7 +767,10 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
         </div>
       )}
 
-      <div className="detail-scrollable-content rrd-scrollable">
+      <div
+        ref={scrollContainerRef}
+        className="detail-scrollable-content rrd-scrollable"
+      >
         <div className="detail-header">
           <button
             onClick={() => {

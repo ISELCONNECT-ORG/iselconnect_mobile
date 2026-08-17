@@ -8,12 +8,17 @@ import ProfileTab from "./ProfileTab";
 import { translations } from "../components/translations";
 import AreaAlertPopup from "../components/AreaAlertPopup";
 
-// Import our new Guard component
 import AccountBlockedGuard from "./AccountBlockedGuard";
+import ResidentReportDetail from "./ResidentReportDetail";
+import { supabase } from "../supabaseClient";
+
+// 🌟 NEW: Import the memory checker function
+import { getPendingNotificationData } from "../utils/pushNotifications";
 
 function ResidentDashboard({ session, onLogout }) {
   const [activeTab, setActiveTab] = useState("home");
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
 
   useEffect(() => {
     if (localStorage.getItem("isNewResident") === "true") {
@@ -22,8 +27,68 @@ function ResidentDashboard({ session, onLogout }) {
     }
   }, []);
 
+  // 🌟 UPDATED: PUSH NOTIFICATION TAP LISTENER
+  useEffect(() => {
+    // 1. Function to actually open the report
+    const openReportFromData = async (payloadData) => {
+      if (payloadData && payloadData.reportId) {
+        console.log(
+          "Opening report ID from notification:",
+          payloadData.reportId,
+        );
+        const { data, error } = await supabase
+          .from("reports")
+          .select(
+            `
+            *,
+            report_types ( name, priority_level ),
+            report_statuses ( id, name )
+          `,
+          )
+          .eq("id", payloadData.reportId)
+          .single();
+
+        if (data && !error) {
+          setSelectedReport(data);
+        }
+      }
+    };
+
+    // 2. CHECK FOR COLD START MISSED TAPS FIRST!
+    const missedTapData = getPendingNotificationData();
+    if (missedTapData) {
+      console.log("Found a missed tap from cold start!");
+      openReportFromData(missedTapData);
+    }
+
+    // 3. Listen for normal taps while the app is already open in the background
+    const handleNotificationTap = (event) => {
+      openReportFromData(event.detail);
+    };
+
+    window.addEventListener("onPushNotificationTap", handleNotificationTap);
+
+    return () => {
+      window.removeEventListener(
+        "onPushNotificationTap",
+        handleNotificationTap,
+      );
+    };
+  }, []);
+
+  if (selectedReport) {
+    return (
+      <AccountBlockedGuard>
+        <ResidentReportDetail
+          report={selectedReport}
+          onBack={() => setSelectedReport(null)}
+          onReportUpdated={() => setSelectedReport(null)}
+        />
+      </AccountBlockedGuard>
+    );
+  }
+
   return (
-    /* Wrap the entire app layout in the Guard */
     <AccountBlockedGuard>
       <div className="dashboard-layout">
         <AreaAlertPopup />

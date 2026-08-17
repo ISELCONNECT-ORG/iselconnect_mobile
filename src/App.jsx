@@ -7,6 +7,7 @@ import LinemanDashboard from "./LINEMAN/LinemanDashboard";
 import { useActiveStatus } from "./hooks/useActiveStatus";
 import { Network } from "@capacitor/network";
 import { WifiOff } from "lucide-react";
+import { setupPushNotifications } from "./utils/pushNotifications";
 
 function App() {
   // Global Background Tracker
@@ -81,6 +82,19 @@ function App() {
       }
     };
   }, []);
+
+  // 🌟 --- PUSH NOTIFICATIONS EFFECT (FIXED) --- 🌟
+  useEffect(() => {
+    // Only run this IF we have a logged-in user session
+    if (session && session.user) {
+      const initializePush = async () => {
+        console.log("User is logged in! Registering for Push Notifications...");
+        await setupPushNotifications();
+      };
+
+      initializePush();
+    }
+  }, [session]); // The dependency array now watches the 'session' state
 
   // --- AUTHENTICATION EFFECT ---
   useEffect(() => {

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "858799312641",
+    "project_id": "iselconnect",
+    "storage_bucket": "iselconnect.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:858799312641:android:c6bd0acad7b6b393d71500",
+        "android_client_info": {
+          "package_name": "com.iselconnect.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMT3TvCYmMahcfLdf7Kao5wiGXDMnGjpY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

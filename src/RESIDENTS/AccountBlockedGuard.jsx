@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
-import { ShieldAlert, MapPin, Calendar, MessageSquare } from "lucide-react";
+import {
+  ShieldAlert,
+  MapPin,
+  Calendar,
+  MessageSquare,
+  LogOut,
+} from "lucide-react";
 import LoadingScreen from "../components/LoadingScreen";
 
 function AccountBlockedGuard({ children }) {
@@ -17,24 +23,32 @@ function AccountBlockedGuard({ children }) {
         } = await supabase.auth.getUser();
         if (authError || !user) return;
 
-        // Fetch reports with their status (Exactly how HomeTab does it)
-        const { data, error } = await supabase
+        // 1. Fetch user's ban_status
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("ban_status, rejected_reports_count")
+          .eq("id", user.id)
+          .single();
+
+        if (userError) throw userError;
+
+        // 2. Fetch rejected reports to display reasons on screen
+        const { data: reportsData } = await supabase
           .from("reports")
           .select("id, landmark, remarks, created_at, report_statuses(name)")
           .eq("residents_id", user.id)
           .order("created_at", { ascending: false });
 
-        if (!error && data) {
-          // Filter the rejected reports in JavaScript
-          const rejected = data.filter(
-            (r) => r.report_statuses?.name?.toUpperCase() === "REJECTED",
-          );
+        const rejected = (reportsData || []).filter(
+          (r) => r.report_statuses?.name?.toUpperCase() === "REJECTED",
+        );
+        setRejectedReports(rejected);
 
-          // Trigger the block if they have 1 or more (for testing)
-          if (rejected.length >= 5) {
-            setIsBlocked(true);
-            setRejectedReports(rejected);
-          }
+        // 3. Block if ban_status is true
+        if (userData?.ban_status === true) {
+          setIsBlocked(true);
+        } else {
+          setIsBlocked(false);
         }
       } catch (err) {
         console.error("Error checking blocked status:", err);
@@ -58,11 +72,16 @@ function AccountBlockedGuard({ children }) {
     });
   };
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.reload();
+  };
+
   if (loading) {
     return <LoadingScreen message="Checking account status..." />;
   }
 
-  // If they hit the threshold, trap them on this screen
+  // If blocked, show this screen
   if (isBlocked) {
     return (
       <div
@@ -81,7 +100,6 @@ function AccountBlockedGuard({ children }) {
           left: 0,
           width: "100vw",
           height: "100vh",
-          borderRadius: "0",
           margin: 0,
           zIndex: 999999,
         }}
@@ -90,7 +108,7 @@ function AccountBlockedGuard({ children }) {
           style={{
             backgroundColor: "#ffffff",
             borderRadius: "24px",
-            padding: "35px 20px",
+            padding: "30px 20px",
             width: "100%",
             maxWidth: "400px",
             boxSizing: "border-box",
@@ -104,172 +122,196 @@ function AccountBlockedGuard({ children }) {
           <div
             style={{
               backgroundColor: "#fee2e2",
-              width: "80px",
-              height: "80px",
+              width: "70px",
+              height: "70px",
               borderRadius: "50%",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              margin: "0 auto 20px auto",
+              margin: "0 auto 15px auto",
               flexShrink: 0,
             }}
           >
-            <ShieldAlert size={48} color="#dc2626" />
+            <ShieldAlert size={42} color="#dc2626" />
           </div>
 
           <h2
             style={{
               color: "#1e293b",
               fontWeight: "900",
-              margin: "0 0 12px 0",
-              fontSize: "1.4rem",
+              margin: "0 0 10px 0",
+              fontSize: "1.35rem",
               textAlign: "center",
             }}
           >
-            Account Blocked
+            Account Restricted
           </h2>
 
           <p
             style={{
               color: "#475569",
-              fontSize: "0.88rem",
-              lineHeight: "1.6",
-              margin: "0 0 20px 0",
+              fontSize: "0.85rem",
+              lineHeight: "1.5",
+              margin: "0 0 16px 0",
               textAlign: "center",
             }}
           >
-            Your account has been temporarily restricted due to submitting{" "}
-            <strong>1 or more rejected or false reports</strong>. Please review
-            the details of your rejected reports below.
+            Your account has been restricted from submitting reports due to
+            multiple invalid submissions or administrative action.
           </p>
 
           <div
             style={{
               backgroundColor: "#fef2f2",
               border: "1px solid #fca5a5",
-              borderRadius: "14px",
-              padding: "12px 15px",
+              borderRadius: "12px",
+              padding: "10px 14px",
               width: "100%",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: "8px",
-              marginBottom: "25px",
+              marginBottom: "16px",
               boxSizing: "border-box",
               flexShrink: 0,
             }}
           >
             <span
               style={{
-                fontSize: "0.85rem",
+                fontSize: "0.82rem",
                 color: "#334155",
                 fontWeight: "bold",
               }}
             >
               Account Status:{" "}
-              <strong style={{ color: "#dc2626" }}>BLOCKED</strong>
+              <strong style={{ color: "#dc2626" }}>BANNED / RESTRICTED</strong>
             </span>
           </div>
 
-          <div
-            style={{
-              width: "100%",
-              overflowY: "auto",
-              paddingRight: "5px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-            }}
-          >
-            <h3
+          {rejectedReports.length > 0 && (
+            <div
               style={{
-                margin: "0 0 5px 0",
-                fontSize: "0.9rem",
-                color: "#1e293b",
-                fontWeight: "bold",
+                width: "100%",
+                overflowY: "auto",
+                paddingRight: "5px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                marginBottom: "16px",
+                maxHeight: "180px",
               }}
             >
-              Rejected Report History:
-            </h3>
-
-            {rejectedReports.map((report) => (
-              <div
-                key={report.id}
+              <h3
                 style={{
-                  backgroundColor: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "12px",
-                  padding: "12px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
+                  margin: "0 0 4px 0",
+                  fontSize: "0.85rem",
+                  color: "#1e293b",
+                  fontWeight: "bold",
                 }}
               >
+                Rejected Report History ({rejectedReports.length}):
+              </h3>
+
+              {rejectedReports.map((report) => (
                 <div
+                  key={report.id}
                   style={{
+                    backgroundColor: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "10px",
+                    padding: "10px",
                     display: "flex",
-                    alignItems: "flex-start",
-                    gap: "6px",
+                    flexDirection: "column",
+                    gap: "4px",
                   }}
                 >
-                  <MapPin
-                    size={14}
-                    color="#dc2626"
-                    style={{ marginTop: "2px", flexShrink: 0 }}
-                  />
-                  <span
+                  <div
                     style={{
-                      fontSize: "0.85rem",
-                      color: "#334155",
-                      fontWeight: "700",
-                      lineHeight: "1.2",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "6px",
                     }}
                   >
-                    {report.landmark || "Unknown Location"}
-                  </span>
-                </div>
+                    <MapPin
+                      size={13}
+                      color="#dc2626"
+                      style={{ marginTop: "2px", flexShrink: 0 }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "#334155",
+                        fontWeight: "700",
+                      }}
+                    >
+                      {report.landmark || "Unknown Location"}
+                    </span>
+                  </div>
 
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "6px" }}
-                >
-                  <Calendar
-                    size={14}
-                    color="#64748b"
-                    style={{ flexShrink: 0 }}
-                  />
-                  <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                    {formatDateTime(report.created_at)}
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "6px",
-                    marginTop: "4px",
-                  }}
-                >
-                  <MessageSquare
-                    size={14}
-                    color="#b45309"
-                    style={{ marginTop: "2px", flexShrink: 0 }}
-                  />
-                  <span
+                  <div
                     style={{
-                      fontSize: "0.8rem",
-                      color: "#92400e",
-                      fontWeight: "600",
-                      fontStyle: "italic",
-                      lineHeight: "1.3",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
                     }}
                   >
-                    "{report.remarks || "No specific reason provided."}"
-                  </span>
+                    <Calendar
+                      size={13}
+                      color="#64748b"
+                      style={{ flexShrink: 0 }}
+                    />
+                    <span style={{ fontSize: "0.72rem", color: "#64748b" }}>
+                      {formatDateTime(report.created_at)}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "6px",
+                    }}
+                  >
+                    <MessageSquare
+                      size={13}
+                      color="#b45309"
+                      style={{ marginTop: "2px", flexShrink: 0 }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "#92400e",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      "{report.remarks || "No reason provided."}"
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={handleSignOut}
+            style={{
+              width: "100%",
+              padding: "12px",
+              backgroundColor: "#1b0b8c",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "50px",
+              fontWeight: "bold",
+              fontSize: "0.9rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+            }}
+          >
+            <LogOut size={16} /> Sign Out
+          </button>
         </div>
       </div>
     );

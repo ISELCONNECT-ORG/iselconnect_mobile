@@ -365,16 +365,33 @@ function ReportTab({ isActive, onNavigateHome }) {
     setError("");
 
     try {
+      // 1. Force a strict permission check first
+      let permissions = await Geolocation.checkPermissions();
+
+      if (permissions.location !== "granted") {
+        permissions = await Geolocation.requestPermissions();
+      }
+
+      if (permissions.location !== "granted") {
+        throw new Error("Location permission denied. Cannot fetch GPS.");
+      }
+
+      // 2. Request the absolute highest accuracy from the hardware
       const position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
+        enableHighAccuracy: true, // Demands physical GPS chip
+        maximumAge: 0, // Rejects old cached locations
+        timeout: 20000, // Gives the chip 20 full seconds to find a satellite in space
       });
+
       setCoordinates({
         lat: position.coords.latitude.toFixed(6),
         lon: position.coords.longitude.toFixed(6),
       });
     } catch (err) {
       console.error("Location access failed:", err);
-      setError("Location access denied or failed. Please enable GPS.");
+      setError(
+        "Failed to get precise GPS lock. Please step outside for a clear view of the sky and ensure your device settings allow 'Precise Location'.",
+      );
       setCoordinates({ lat: "", lon: "" });
     }
   }, [webcamRef]);
@@ -481,10 +498,27 @@ function ReportTab({ isActive, onNavigateHome }) {
         reportTypes.find(
           (type) => type.id === parseInt(formData.report_type_id),
         )?.name || "issue";
+
       await logSystemAction(
         "SUBMIT_REPORT",
         `Resident submitted a new ${typeName} report at ${formData.landmark.trim()}.`,
       );
+
+      // 🌟 NEW: Create a notification row for the resident
+      const { error: notifError } = await supabase
+        .from("notifications")
+        .insert([
+          {
+            residents_id: user.id,
+            title: "Report Submitted",
+            message: `Your report for a ${typeName} at ${formData.landmark.trim()} has been successfully submitted and is now pending review.`,
+            is_read: false,
+          },
+        ]);
+
+      if (notifError) {
+        console.error("Failed to generate notification:", notifError.message);
+      }
 
       // Trigger the success modal
       setShowSuccessModal(true);

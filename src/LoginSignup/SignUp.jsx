@@ -9,17 +9,14 @@ import {
   Circle,
   ShieldCheck,
   CreditCard,
-  UserCheck,
   ChevronDown,
 } from "lucide-react";
 import logo from "../assets/ISELCONNECT.png";
 import { logSystemAction } from "../utils/logger";
 
-// Import our new separated components
 import IdVerification from "./IdVerification";
 import EmailOtpVerification from "./EmailOtpVerification";
 
-// A tiny 1x1 pixel image to use as a placeholder when testing
 const DUMMY_IMAGE =
   "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
 
@@ -89,6 +86,7 @@ const SearchableDropdown = ({
           cursor: disabled ? "not-allowed" : "text",
           width: "100%",
           boxSizing: "border-box",
+          padding: "14px 20px",
         }}
         placeholder={placeholder}
         value={displayValue}
@@ -169,14 +167,12 @@ const SearchableDropdown = ({
 };
 
 function SignUp({ onBack }) {
-  // --- STATE MANAGEMENT ---
   const [signupStep, setSignupStep] = useState("privacy");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Form Data States
   const [municipalities, setMunicipalities] = useState([]);
   const [barangays, setBarangays] = useState([]);
   const [formData, setFormData] = useState({
@@ -195,11 +191,9 @@ function SignUp({ onBack }) {
     otp: "",
   });
 
-  // Saved Camera Images for Final Submission
   const [capturedIdImage, setCapturedIdImage] = useState(null);
   const [capturedSelfieImage, setCapturedSelfieImage] = useState(null);
 
-  // Prevent background scrolling when modal is open
   useEffect(() => {
     if (showSuccessModal) document.body.style.overflow = "hidden";
     else document.body.style.overflow = "";
@@ -208,7 +202,6 @@ function SignUp({ onBack }) {
     };
   }, [showSuccessModal]);
 
-  // --- USE EFFECTS FOR LOCATION DATA ---
   useEffect(() => {
     const fetchMunicipalities = async () => {
       const { data, error } = await supabase
@@ -272,18 +265,14 @@ function SignUp({ onBack }) {
       (m) => m.id.toString() === formData.municipality_id.toString(),
     )?.name === "Other / Outside Coverage Area";
 
-  // --- HANDLERS FOR THE NEW CAMERA COMPONENT ---
   const handleIdCaptured = (imageSrc, parsedData) => {
     setCapturedIdImage(imageSrc);
-
-    // Automatically fill in the form with OCR data if it exists
     setFormData((prev) => ({
       ...prev,
       idNumber: parsedData.idNumber || prev.idNumber,
       firstName: parsedData.firstName || prev.firstName,
       lastName: parsedData.lastName || prev.lastName,
     }));
-
     setSignupStep("selfie-scan");
   };
 
@@ -292,7 +281,6 @@ function SignUp({ onBack }) {
     setSignupStep("form");
   };
 
-  // --- SUPABASE SIGN UP LOGIC (AUTH ONLY) ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -306,10 +294,6 @@ function SignUp({ onBack }) {
       if (!formData.idNumber.trim())
         throw new Error("Please provide your ID Number.");
 
-      // THE ERROR WAS HERE: We removed the block that stops you if photos are missing!
-      // This allows you to test the form without using the camera.
-
-      // 1. Create the Auth Account (No DB Inserts Yet)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email.trim(),
         password: formData.password,
@@ -319,7 +303,6 @@ function SignUp({ onBack }) {
       if (!authData?.user?.id)
         throw new Error("Failed to create account. Email might already exist.");
 
-      // Progress to OTP screen. DB inserts wait until after OTP!
       setSignupStep("otp");
     } catch (error) {
       setErrorMsg(error.message);
@@ -328,13 +311,11 @@ function SignUp({ onBack }) {
     }
   };
 
-  // --- OTP VERIFICATION & DATABASE UPLOAD LOGIC ---
   const handleVerifyOTP = async () => {
     setLoading(true);
     setErrorMsg("");
 
     try {
-      // 1. Verify OTP Code
       const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
         email: formData.email.trim(),
         token: formData.otp.trim(),
@@ -347,7 +328,6 @@ function SignUp({ onBack }) {
 
       const userId = otpData.user.id;
 
-      // 2. User is now active. Upload ID Photo (Using dummy image if missing!)
       const idBlob = base64ToBlob(capturedIdImage || DUMMY_IMAGE);
       const idFileName = `${userId}/id-${Date.now()}.jpg`;
       const { error: idUploadError } = await supabase.storage
@@ -359,7 +339,6 @@ function SignUp({ onBack }) {
         .from("verification_photos")
         .getPublicUrl(idFileName).data.publicUrl;
 
-      // 3. Upload Selfie (Using dummy image if missing!)
       const selfieBlob = base64ToBlob(capturedSelfieImage || DUMMY_IMAGE);
       const selfieFileName = `${userId}/selfie-${Date.now()}.jpg`;
       const { error: selfieUploadError } = await supabase.storage
@@ -371,7 +350,6 @@ function SignUp({ onBack }) {
         .from("verification_photos")
         .getPublicUrl(selfieFileName).data.publicUrl;
 
-      // 4. Save Core Profile Data to 'users' table
       let finalPurokSitio = formData.purokSitio.trim();
       if (isOtherMunicipality && formData.otherLocation.trim()) {
         finalPurokSitio = finalPurokSitio
@@ -398,7 +376,6 @@ function SignUp({ onBack }) {
       );
       if (userError) throw userError;
 
-      // 5. Save eKYC Documents to the 'user_verifications' table
       const { error: kycError } = await supabase
         .from("user_verifications")
         .insert([
@@ -419,7 +396,6 @@ function SignUp({ onBack }) {
         `Resident created account and submitted eKYC photos.`,
       );
 
-      // EVERYTHING SUCCESSFUL! Show modal.
       setShowSuccessModal(true);
     } catch (error) {
       if (
@@ -437,7 +413,6 @@ function SignUp({ onBack }) {
     }
   };
 
-  // --- UI HELPERS ---
   const handleBackNavigation = () => {
     if (signupStep === "otp") return;
     if (signupStep === "form") setSignupStep("selfie-scan");
@@ -454,7 +429,6 @@ function SignUp({ onBack }) {
 
   return (
     <div className="auth-layout">
-      {/* SUCCESS MODAL */}
       {showSuccessModal &&
         createPortal(
           <div
@@ -533,23 +507,12 @@ function SignUp({ onBack }) {
           document.body,
         )}
 
-      <div
-        className="auth-top-section auth-bg-photo"
-        style={{
-          position: "relative",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      <div className="auth-top-section auth-bg-photo">
         {signupStep !== "otp" && (
           <button
             className="auth-back-btn"
             type="button"
             style={{
-              position: "absolute",
-              top: "20px",
-              left: "20px",
               zIndex: 10,
               animation: "contentFade 0.3s ease-out",
             }}
@@ -558,25 +521,14 @@ function SignUp({ onBack }) {
             <ChevronLeft size={24} strokeWidth={2.5} color="#1e1b4b" />
           </button>
         )}
-        <div
-          className="auth-logo-container"
-          style={{ display: "flex", justifyContent: "center", width: "100%" }}
-        >
-          <img src={logo} alt="ISELCONNECT Logo" className="auth-logo-img" />
-        </div>
+        <img src={logo} alt="ISELCONNECT Logo" className="auth-logo-img" />
       </div>
 
-      <div
-        className="auth-bottom-section"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          animation: "slideUpFade 0.4s ease-out",
-        }}
-      >
+      <div className="auth-bottom-section">
         <div className="auth-title-container">
           <h2 className="auth-form-title">
-            <span className="text-white">SIGN UP</span>
+            <span style={{ color: "#facc15" }}>RESIDENTS</span>{" "}
+            <span style={{ color: "#ffffff" }}>SIGN UP</span>
           </h2>
           <div className="auth-title-underline"></div>
         </div>
@@ -587,7 +539,6 @@ function SignUp({ onBack }) {
         {signupStep === "privacy" && (
           <div
             style={{
-              flex: 1,
               display: "flex",
               flexDirection: "column",
               animation: "contentFade 0.3s ease-out",
@@ -598,8 +549,6 @@ function SignUp({ onBack }) {
                 backgroundColor: "#f8fafc",
                 padding: "20px",
                 borderRadius: "15px",
-                flex: 1,
-                overflowY: "auto",
                 boxShadow: "inset 0 2px 4px rgba(0,0,0,0.05)",
               }}
             >
@@ -676,7 +625,6 @@ function SignUp({ onBack }) {
         {signupStep === "id-select" && (
           <div
             style={{
-              flex: 1,
               display: "flex",
               flexDirection: "column",
               animation: "contentFade 0.3s ease-out",
@@ -687,7 +635,6 @@ function SignUp({ onBack }) {
                 backgroundColor: "#f8fafc",
                 padding: "20px",
                 borderRadius: "15px",
-                flex: 1,
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
@@ -763,44 +710,54 @@ function SignUp({ onBack }) {
             style={{
               display: "flex",
               flexDirection: "column",
-              flex: 1,
-              overflow: "hidden",
               animation: "contentFade 0.3s ease-out",
             }}
           >
+            {/* 🌟 FIXED: Removed inline flex/overflow restrictions so the whole page scrolls */}
             <div
               style={{
-                flex: 1,
-                overflowY: "auto",
-                paddingRight: "5px",
                 display: "flex",
                 flexDirection: "column",
-                gap: "10px",
+                gap: "12px",
                 marginBottom: "15px",
               }}
             >
-              <div
-                style={{
-                  background: "#ecfdf5",
-                  padding: "10px",
-                  borderRadius: "10px",
-                  marginBottom: "5px",
-                  border: "1px solid #10b981",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                }}
-              >
-                <UserCheck size={18} color="#059669" />
-                <span
-                  style={{
-                    fontSize: "0.8rem",
-                    color: "#065f46",
-                    fontWeight: "bold",
-                  }}
-                >
-                  Photos Secured. Complete details below.
-                </span>
+              <div className="auth-input-group">
+                <input
+                  type="text"
+                  name="firstName"
+                  placeholder="First Name"
+                  value={formData.firstName}
+                  onChange={handleInputChange}
+                  required
+                  className="auth-input"
+                  style={{ padding: "14px 20px" }}
+                />
+              </div>
+
+              <div className="auth-input-group">
+                <input
+                  type="text"
+                  name="middleName"
+                  placeholder="Middle Name"
+                  value={formData.middleName}
+                  onChange={handleInputChange}
+                  className="auth-input"
+                  style={{ padding: "14px 20px" }}
+                />
+              </div>
+
+              <div className="auth-input-group">
+                <input
+                  type="text"
+                  name="lastName"
+                  placeholder="Last Name"
+                  value={formData.lastName}
+                  onChange={handleInputChange}
+                  required
+                  className="auth-input"
+                  style={{ padding: "14px 20px" }}
+                />
               </div>
 
               <div className="auth-input-group">
@@ -812,66 +769,19 @@ function SignUp({ onBack }) {
                   onChange={handleInputChange}
                   required
                   className="auth-input"
-                  style={{ border: "2px solid #1b0b8c" }}
-                />
-              </div>
-
-              <div
-                className="auth-input-group"
-                style={{ display: "flex", gap: "10px" }}
-              >
-                <input
-                  type="text"
-                  name="firstName"
-                  placeholder="First Name"
-                  value={formData.firstName}
-                  onChange={handleInputChange}
-                  required
-                  className="auth-input"
-                  style={{ flex: 1 }}
-                />
-                <input
-                  type="text"
-                  name="lastName"
-                  placeholder="Last Name"
-                  value={formData.lastName}
-                  onChange={handleInputChange}
-                  required
-                  className="auth-input"
-                  style={{ flex: 1 }}
+                  style={{ padding: "14px 20px" }}
                 />
               </div>
 
               <div className="auth-input-group">
                 <input
                   type="text"
-                  name="middleName"
-                  placeholder="Middle Name (Optional)"
-                  value={formData.middleName}
+                  name="purokSitio"
+                  placeholder="Purok"
+                  value={formData.purokSitio}
                   onChange={handleInputChange}
                   className="auth-input"
-                />
-              </div>
-
-              <div className="auth-input-group">
-                <input
-                  type="tel"
-                  name="mobileNumber"
-                  placeholder="Mobile Number (e.g. 09123456789)"
-                  value={formData.mobileNumber}
-                  onChange={handleInputChange}
-                  required
-                  className="auth-input"
-                />
-              </div>
-
-              <div className="auth-input-group">
-                <SearchableDropdown
-                  name="municipality_id"
-                  options={municipalities}
-                  value={formData.municipality_id}
-                  onChange={handleInputChange}
-                  placeholder="Select Municipality"
+                  style={{ padding: "14px 20px" }}
                 />
               </div>
 
@@ -883,10 +793,20 @@ function SignUp({ onBack }) {
                   onChange={handleInputChange}
                   placeholder={
                     !formData.municipality_id
-                      ? "Select Municipality first"
-                      : "Select Barangay"
+                      ? "Select Municipality First"
+                      : "Barangay"
                   }
                   disabled={!formData.municipality_id || isOtherMunicipality}
+                />
+              </div>
+
+              <div className="auth-input-group">
+                <SearchableDropdown
+                  name="municipality_id"
+                  options={municipalities}
+                  value={formData.municipality_id}
+                  onChange={handleInputChange}
+                  placeholder="Municipality"
                 />
               </div>
 
@@ -900,22 +820,21 @@ function SignUp({ onBack }) {
                     onChange={handleInputChange}
                     required
                     className="auth-input"
+                    style={{ padding: "14px 20px" }}
                   />
                 </div>
               )}
 
               <div className="auth-input-group">
                 <input
-                  type="text"
-                  name="purokSitio"
-                  placeholder={
-                    isOtherMunicipality
-                      ? "Street Address / Unit (Optional)"
-                      : "Purok / Sitio (Optional)"
-                  }
-                  value={formData.purokSitio}
+                  type="tel"
+                  name="mobileNumber"
+                  placeholder="Mobile Number"
+                  value={formData.mobileNumber}
                   onChange={handleInputChange}
+                  required
                   className="auth-input"
+                  style={{ padding: "14px 20px" }}
                 />
               </div>
 
@@ -923,11 +842,12 @@ function SignUp({ onBack }) {
                 <input
                   type="email"
                   name="email"
-                  placeholder="Email Address"
+                  placeholder="Email"
                   value={formData.email}
                   onChange={handleInputChange}
                   required
                   className="auth-input"
+                  style={{ padding: "14px 20px" }}
                 />
               </div>
 
@@ -941,6 +861,7 @@ function SignUp({ onBack }) {
                     onChange={handleInputChange}
                     required
                     className="auth-input"
+                    style={{ padding: "14px 20px" }}
                   />
                   <button
                     type="button"
@@ -956,96 +877,98 @@ function SignUp({ onBack }) {
                 </div>
                 <div
                   style={{
-                    marginTop: "10px",
-                    marginLeft: "15px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "6px",
+                    marginTop: "6px",
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "4px",
+                    paddingLeft: "10px",
                   }}
                 >
                   <span
                     style={{
-                      fontSize: "0.8rem",
+                      fontSize: "0.75rem",
                       color: hasLength ? "#4ade80" : "#cbd5e1",
                       display: "flex",
                       alignItems: "center",
-                      gap: "8px",
+                      gap: "4px",
                       fontWeight: "600",
-                      transition: "color 0.2s",
                     }}
                   >
                     {hasLength ? (
-                      <CheckCircle size={16} />
+                      <CheckCircle size={12} />
                     ) : (
-                      <Circle size={16} />
+                      <Circle size={12} />
                     )}{" "}
-                    At least 8 characters
+                    8+ chars
                   </span>
                   <span
                     style={{
-                      fontSize: "0.8rem",
+                      fontSize: "0.75rem",
                       color: hasLetter ? "#4ade80" : "#cbd5e1",
                       display: "flex",
                       alignItems: "center",
-                      gap: "8px",
+                      gap: "4px",
                       fontWeight: "600",
-                      transition: "color 0.2s",
                     }}
                   >
                     {hasLetter ? (
-                      <CheckCircle size={16} />
+                      <CheckCircle size={12} />
                     ) : (
-                      <Circle size={16} />
+                      <Circle size={12} />
                     )}{" "}
-                    At least 1 letter
+                    1+ letter
                   </span>
                   <span
                     style={{
-                      fontSize: "0.8rem",
+                      fontSize: "0.75rem",
                       color: hasNumber ? "#4ade80" : "#cbd5e1",
                       display: "flex",
                       alignItems: "center",
-                      gap: "8px",
+                      gap: "4px",
                       fontWeight: "600",
-                      transition: "color 0.2s",
                     }}
                   >
                     {hasNumber ? (
-                      <CheckCircle size={16} />
+                      <CheckCircle size={12} />
                     ) : (
-                      <Circle size={16} />
+                      <Circle size={12} />
                     )}{" "}
-                    At least 1 number
+                    1+ number
                   </span>
                   <span
                     style={{
-                      fontSize: "0.8rem",
+                      fontSize: "0.75rem",
                       color: hasSpecial ? "#4ade80" : "#cbd5e1",
                       display: "flex",
                       alignItems: "center",
-                      gap: "8px",
+                      gap: "4px",
                       fontWeight: "600",
-                      transition: "color 0.2s",
                     }}
                   >
                     {hasSpecial ? (
-                      <CheckCircle size={16} />
+                      <CheckCircle size={12} />
                     ) : (
-                      <Circle size={16} />
+                      <Circle size={12} />
                     )}{" "}
-                    At least 1 special character
+                    1+ special
                   </span>
                 </div>
               </div>
             </div>
 
-            <div style={{ marginTop: "auto", flexShrink: 0 }}>
+            <div
+              style={{
+                marginTop: "auto",
+                flexShrink: 0,
+                paddingBottom: "10px",
+              }}
+            >
               <button
                 type="submit"
-                className="auth-submit-btn"
                 disabled={loading}
+                className="auth-submit-btn-mockup"
               >
-                {loading ? "Processing..." : "Submit Registration"}
+                {loading ? "PROCESSING..." : "SUBMIT"}
               </button>
             </div>
           </form>
@@ -1062,17 +985,6 @@ function SignUp({ onBack }) {
           />
         )}
       </div>
-
-      <style>{`
-        @keyframes slideUpFade {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes contentFade {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }

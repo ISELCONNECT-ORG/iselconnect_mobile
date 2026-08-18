@@ -128,21 +128,21 @@ function NotificationTab() {
         overflowY: "auto",
         overscrollBehavior: "none",
         backgroundColor: "#f8fafc",
-        padding: "16px 16px 120px 16px",
+        padding: "0px 16px 120px 16px", // 🌟 FIXED: Removed top padding
       }}
     >
       {/* STICKY FROSTED HEADER */}
       <div
         style={{
           position: "sticky",
-          top: 0,
-          margin: "-16px -16px 20px -16px",
+          top: "-1px", // 🌟 FIXED: Anchors seamlessly to the very top edge
+          margin: "0 -16px 20px -16px", // 🌟 FIXED: Removed negative top margin
           padding: "22px 16px 18px 16px",
-          background: "rgba(248, 250, 252, 0.85)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
+          background: "rgba(248, 250, 252, 0.92)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
           zIndex: 50,
-          borderBottom: "1px solid rgba(0,0,0,0.05)",
+          borderBottom: "1px solid rgba(0,0,0,0.06)",
           display: "flex",
           alignItems: "center",
           gap: "10px",

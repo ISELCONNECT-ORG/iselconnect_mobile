@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   MapPin,
   CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -146,11 +147,13 @@ const SearchableDropdown = ({
   );
 };
 
-function ReportTab({ isActive, onNavigateHome }) {
+function ReportTab({ isActive }) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
   const t = translations[currentLang];
 
   const [verificationStatus, setVerificationStatus] = useState("loading");
+  const [hasPendingReport, setHasPendingReport] = useState(false);
+  const [pendingReportDetails, setPendingReportDetails] = useState(null);
   const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(false);
 
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -182,7 +185,7 @@ function ReportTab({ isActive, onNavigateHome }) {
   }, [isActive]);
 
   useEffect(() => {
-    const checkVerificationStatus = async () => {
+    const checkUserStatus = async () => {
       try {
         const {
           data: { user },
@@ -190,26 +193,46 @@ function ReportTab({ isActive, onNavigateHome }) {
         } = await supabase.auth.getUser();
 
         if (user && !authError) {
-          const { data, error: dbError } = await supabase
+          const { data: verData, error: dbError } = await supabase
             .from("user_verifications")
             .select("verification_status")
             .eq("user_id", user.id)
             .single();
 
-          if (data && !dbError) {
-            setVerificationStatus(data.verification_status || "pending");
+          if (verData && !dbError) {
+            setVerificationStatus(verData.verification_status || "pending");
           } else {
             setVerificationStatus("pending");
           }
+
+          const { data: reportsData, error: reportsError } = await supabase
+            .from("reports")
+            .select("id, landmark, created_at, report_statuses(name)")
+            .eq("residents_id", user.id);
+
+          if (!reportsError && reportsData) {
+            const activeReport = reportsData.find((r) => {
+              const statusName = r.report_statuses?.name?.toUpperCase() || "";
+              return statusName === "PENDING";
+            });
+
+            if (activeReport) {
+              setHasPendingReport(true);
+              setPendingReportDetails(activeReport);
+            } else {
+              setHasPendingReport(false);
+              setPendingReportDetails(null);
+            }
+          }
         }
       } catch (err) {
-        console.error("Failed to check verification status:", err);
+        console.error("Failed to check user status:", err);
         setVerificationStatus("pending");
       }
     };
 
     if (isActive) {
-      checkVerificationStatus();
+      checkUserStatus();
     }
   }, [isActive]);
 
@@ -365,9 +388,7 @@ function ReportTab({ isActive, onNavigateHome }) {
     setError("");
 
     try {
-      // 1. Force a strict permission check first
       let permissions = await Geolocation.checkPermissions();
-
       if (permissions.location !== "granted") {
         permissions = await Geolocation.requestPermissions();
       }
@@ -376,11 +397,10 @@ function ReportTab({ isActive, onNavigateHome }) {
         throw new Error("Location permission denied. Cannot fetch GPS.");
       }
 
-      // 2. Request the absolute highest accuracy from the hardware
       const position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true, // Demands physical GPS chip
-        maximumAge: 0, // Rejects old cached locations
-        timeout: 20000, // Gives the chip 20 full seconds to find a satellite in space
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 20000,
       });
 
       setCoordinates({
@@ -408,6 +428,12 @@ function ReportTab({ isActive, onNavigateHome }) {
   const handleSubmitReport = async () => {
     if (verificationStatus !== "approved") {
       return setError("Only verified accounts can submit reports.");
+    }
+
+    if (hasPendingReport) {
+      return setError(
+        "You already have a pending report awaiting review. Please wait for it to be processed.",
+      );
     }
 
     if (!imagePreview) return setError("Please capture a photo of the issue.");
@@ -438,18 +464,14 @@ function ReportTab({ isActive, onNavigateHome }) {
         (m) => m.id.toString() === formData.municipality_id.toString(),
       );
 
-      // --- DYNAMIC TIME-BASED ROUTING (Locked to Philippine Time UTC+8) ---
       const now = new Date();
-
       let phHour = now.getUTCHours() + 8;
       if (phHour >= 24) phHour -= 24;
       const phMinute = now.getUTCMinutes();
-
       const timeInMinutes = phHour * 60 + phMinute;
 
-      const startWorkingMinutes = 8 * 60; // 8:00 AM = 480
-      const endWorkingMinutes = 17 * 60; // 5:00 PM = 1020
-
+      const startWorkingMinutes = 8 * 60;
+      const endWorkingMinutes = 17 * 60;
       let automaticBranchId = null;
 
       if (
@@ -498,13 +520,11 @@ function ReportTab({ isActive, onNavigateHome }) {
         reportTypes.find(
           (type) => type.id === parseInt(formData.report_type_id),
         )?.name || "issue";
-
       await logSystemAction(
         "SUBMIT_REPORT",
         `Resident submitted a new ${typeName} report at ${formData.landmark.trim()}.`,
       );
 
-      // 🌟 NEW: Create a notification row for the resident
       const { error: notifError } = await supabase
         .from("notifications")
         .insert([
@@ -520,7 +540,6 @@ function ReportTab({ isActive, onNavigateHome }) {
         console.error("Failed to generate notification:", notifError.message);
       }
 
-      // Trigger the success modal
       setShowSuccessModal(true);
     } catch (err) {
       setError(err.message);
@@ -529,9 +548,6 @@ function ReportTab({ isActive, onNavigateHome }) {
     }
   };
 
-  // ----------------------------------------------------
-  // VERIFICATION LOADING STATE
-  // ----------------------------------------------------
   if (verificationStatus === "loading") {
     return (
       <div
@@ -551,9 +567,6 @@ function ReportTab({ isActive, onNavigateHome }) {
     );
   }
 
-  // ----------------------------------------------------
-  // ACCOUNT PENDING / REJECTED SCREEN
-  // ----------------------------------------------------
   if (verificationStatus !== "approved") {
     const isRejected = verificationStatus === "rejected";
 
@@ -661,6 +674,101 @@ function ReportTab({ isActive, onNavigateHome }) {
     );
   }
 
+  if (hasPendingReport) {
+    return (
+      <div
+        className="bg-navy-tab"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "100vh",
+          padding: "20px 16px 110px 16px",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            margin: "auto",
+            backgroundColor: "#ffffff",
+            borderRadius: "24px",
+            padding: "35px 25px",
+            width: "100%",
+            maxWidth: "400px",
+            boxSizing: "border-box",
+            textAlign: "center",
+            boxShadow: "0 15px 30px rgba(0,0,0,0.2)",
+            animation: "contentFade 0.3s ease-out",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#fef3c7",
+              width: "80px",
+              height: "80px",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px auto",
+            }}
+          >
+            <AlertCircle size={48} color="#d97706" />
+          </div>
+
+          <h2
+            style={{
+              color: "#1e293b",
+              fontWeight: "900",
+              margin: "0 0 12px 0",
+              fontSize: "1.35rem",
+            }}
+          >
+            Pending Report Under Review
+          </h2>
+
+          <p
+            style={{
+              color: "#475569",
+              fontSize: "0.88rem",
+              lineHeight: "1.6",
+              margin: "0 0 20px 0",
+              textAlign: "center",
+            }}
+          >
+            You currently have a report awaiting initial admin review at{" "}
+            <strong>{pendingReportDetails?.landmark || "your location"}</strong>
+            . Please wait for an administrator to review and approve your
+            submission before filing a new one.
+          </p>
+
+          <div
+            style={{
+              backgroundColor: "#fffbe1",
+              border: "1px solid #fde047",
+              borderRadius: "14px",
+              padding: "12px 15px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "0.82rem",
+                color: "#334155",
+                fontWeight: "bold",
+              }}
+            >
+              Status:{" "}
+              <strong style={{ color: "#d97706" }}>PENDING ADMIN REVIEW</strong>
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-navy-tab" style={{ overscrollBehavior: "none" }}>
       {showSuccessModal &&
@@ -710,14 +818,11 @@ function ReportTab({ isActive, onNavigateHome }) {
                     description: "",
                   });
 
-                  // Go back to the Home tab after confirming the success message
-                  if (typeof onNavigateHome === "function") {
-                    onNavigateHome();
-                  } else {
-                    window.dispatchEvent(
-                      new CustomEvent("switchTab", { detail: "Home" }),
-                    );
-                  }
+                  // 🌟 STAYS ON REPORT TAB BUT ACTIVATES RATE LIMIT LOCKOUT SCREEN
+                  setHasPendingReport(true);
+                  setPendingReportDetails({
+                    landmark: formData.landmark.trim(),
+                  });
                 }}
               >
                 OK!
@@ -727,9 +832,6 @@ function ReportTab({ isActive, onNavigateHome }) {
           document.body,
         )}
 
-      {/* ---------------------------------------------------- */}
-      {/* REPORT GUIDELINES SCREEN */}
-      {/* ---------------------------------------------------- */}
       {!hasAcceptedGuidelines ? (
         <div
           style={{
@@ -899,9 +1001,9 @@ function ReportTab({ isActive, onNavigateHome }) {
                       lineHeight: "1.4",
                     }}
                   >
-                    Do not submit false, misleading, or prank reports.
-                    Accumulating 5 rejected reports will permanently block your
-                    account.
+                    You cannot submit a new report while you have another report
+                    pending admin review. Accumulating 5 rejected reports will
+                    permanently block your account.
                   </p>
                 </div>
               </div>

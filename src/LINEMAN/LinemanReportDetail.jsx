@@ -69,6 +69,40 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const isPendingVerification = activeStatus === "PENDING VERIFICATION";
   const isLocked = isResolved || isPendingVerification;
 
+  // 🌟 NEW: Listen for Admin Status Changes live!
+  useEffect(() => {
+    const channel = supabase
+      .channel(`public:lineman_report_${report.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "reports",
+          filter: `id=eq.${report.id}`,
+        },
+        async () => {
+          // Fetch the fresh status if an admin clicks approve/verify
+          const { data } = await supabase
+            .from("reports")
+            .select("report_statuses(name)")
+            .eq("id", report.id)
+            .single();
+
+          if (data) {
+            setActiveStatus(
+              data.report_statuses?.name?.toUpperCase() || "PENDING",
+            );
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [report.id]);
+
   useEffect(() => {
     const resetScroll = () => {
       window.scrollTo(0, 0);
@@ -792,7 +826,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
       className="detail-layout page-transition"
       style={{ overscrollBehavior: "none", backgroundColor: "#f8fafc" }}
     >
-      {/* 🌟 EXPERIMENTAL: Container Transform Style Override */}
       <style>{`
         @keyframes containerTransformExp {
           0% {

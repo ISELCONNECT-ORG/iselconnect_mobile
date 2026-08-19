@@ -5,11 +5,6 @@ import LoadingScreen from "../components/LoadingScreen";
 import { Zap } from "lucide-react";
 import "../Resident.css";
 
-/**
- * Main component for the Advisory Tab.
- * It displays a list of upcoming power outage schedules grouped by date and time.
- * @returns {JSX.Element} The rendered user interface for the advisory screen.
- */
 function AdvisoryTab() {
   const [advisories, setAdvisories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,14 +14,24 @@ function AdvisoryTab() {
 
   useEffect(() => {
     fetchAdvisories();
+
+    // 🌟 NEW: Supabase Realtime Listener for Advisories
+    const channel = supabase
+      .channel("public:power_advisories")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "power_advisories" },
+        () => {
+          fetchAdvisories(); // Instantly refresh when admin adds/cancels
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  /**
-   * Retrieves power advisory records from the database.
-   * It filters out old schedules so the app only shows current or future power outages.
-   * @async
-   * @returns {Promise<void>} Updates the state with the list of advisories.
-   */
   const fetchAdvisories = async () => {
     try {
       setLoading(true);
@@ -48,11 +53,6 @@ function AdvisoryTab() {
     }
   };
 
-  /**
-   * Changes a full date string into a short, readable time format (example: 1:30pm).
-   * @param {string} dateString - The raw date and time string from the database.
-   * @returns {string} The formatted time in basic English format.
-   */
   const formatTime = (dateString) => {
     if (!dateString) return "";
     const date = new Date(dateString);
@@ -66,10 +66,6 @@ function AdvisoryTab() {
       .replace(" ", "");
   };
 
-  /**
-   * Groups the list of advisories by their scheduled date, time, AND status.
-   * This ensures canceled schedules are grouped separately from active ones.
-   */
   const groupedAdvisories = advisories.reduce((acc, current) => {
     const dateStr = new Date(current.schedule_start)
       .toLocaleDateString("en-US", {
@@ -95,15 +91,14 @@ function AdvisoryTab() {
         overflowY: "auto",
         overscrollBehavior: "none",
         backgroundColor: "#f8fafc",
-        padding: "0px 16px 120px 16px", // 🌟 FIXED: Removed top padding so the gap disappears
+        padding: "0px 16px 120px 16px",
       }}
     >
-      {/* STICKY FROSTED HEADER */}
       <div
         style={{
           position: "sticky",
-          top: "-1px", // 🌟 FIXED: Ensures it locks completely to the top on mobile
-          margin: "0 -16px 20px -16px", // 🌟 FIXED: Removed negative top margin
+          top: "-1px",
+          margin: "0 -16px 20px -16px",
           padding: "22px 16px 18px 16px",
           background: "rgba(248, 250, 252, 0.92)",
           backdropFilter: "blur(16px)",

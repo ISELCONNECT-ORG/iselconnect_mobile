@@ -13,6 +13,30 @@ function NotificationTab() {
 
   useEffect(() => {
     fetchNotifications();
+
+    // 🌟 NEW: Listen to 3 different tables at once for total live sync
+    const channel = supabase
+      .channel("public:notifications_all")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications" },
+        () => fetchNotifications(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "reports" },
+        () => fetchNotifications(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "power_advisories" },
+        () => fetchNotifications(),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchNotifications = async () => {
@@ -24,7 +48,6 @@ function NotificationTab() {
       } = await supabase.auth.getUser();
       if (userError || !user) throw userError;
 
-      // 1. Fetch Standard Notifications
       const { data: standardNotifs, error: notifError } = await supabase
         .from("notifications")
         .select("*")
@@ -32,7 +55,6 @@ function NotificationTab() {
         .order("created_at", { ascending: false });
       if (notifError) throw notifError;
 
-      // 2. Fetch Upcoming Advisories based on Barangay
       const { data: userData, error: profileError } = await supabase
         .from("users")
         .select("barangay_id")
@@ -66,7 +88,6 @@ function NotificationTab() {
         }
       }
 
-      // 3. Fetch Rejected Reports to generate synthetic notifications
       const { data: reportsData, error: reportsError } = await supabase
         .from("reports")
         .select("id, landmark, remarks, created_at, report_statuses(name)")
@@ -88,7 +109,6 @@ function NotificationTab() {
         }));
       }
 
-      // Combine all notifications and sort by date
       const combinedNotifs = [
         ...(standardNotifs || []),
         ...upcomingAdvisories,
@@ -128,15 +148,14 @@ function NotificationTab() {
         overflowY: "auto",
         overscrollBehavior: "none",
         backgroundColor: "#f8fafc",
-        padding: "0px 16px 120px 16px", // 🌟 FIXED: Removed top padding
+        padding: "0px 16px 120px 16px",
       }}
     >
-      {/* STICKY FROSTED HEADER */}
       <div
         style={{
           position: "sticky",
-          top: "-1px", // 🌟 FIXED: Anchors seamlessly to the very top edge
-          margin: "0 -16px 20px -16px", // 🌟 FIXED: Removed negative top margin
+          top: "-1px",
+          margin: "0 -16px 20px -16px",
           padding: "22px 16px 18px 16px",
           background: "rgba(248, 250, 252, 0.92)",
           backdropFilter: "blur(16px)",

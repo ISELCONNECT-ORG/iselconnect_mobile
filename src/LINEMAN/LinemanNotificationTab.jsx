@@ -14,6 +14,22 @@ function LinemanNotificationTab() {
 
   useEffect(() => {
     fetchNotifications();
+
+    // 🌟 NEW: Live sync for Lineman Notifications
+    const channel = supabase
+      .channel("public:lineman_notifications")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications" },
+        () => {
+          fetchNotifications();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchNotifications = async () => {
@@ -27,7 +43,7 @@ function LinemanNotificationTab() {
       const { data, error } = await supabase
         .from("notifications")
         .select("*")
-        .eq("residents_id", user.id)
+        .eq("residents_id", user.id) // Works identically for linemen ID
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -61,7 +77,6 @@ function LinemanNotificationTab() {
         minHeight: "100%",
       }}
     >
-      {/* STICKY HEADER */}
       <div
         style={{
           position: "sticky",

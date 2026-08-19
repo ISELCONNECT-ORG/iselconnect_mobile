@@ -19,6 +19,22 @@ function HomeTab() {
 
   useEffect(() => {
     fetchHomeData();
+
+    // 🌟 NEW: Listen to live changes on the reports table!
+    const channel = supabase
+      .channel("public:home_reports_channel")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "reports" },
+        () => {
+          fetchHomeData(); // Pull fresh list on any change
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchHomeData = async () => {
@@ -50,6 +66,15 @@ function HomeTab() {
 
       if (!reportsError && reportsData) {
         setUserReports(reportsData);
+
+        // 🌟 NEW: Automatically update the open detail screen so it doesn't close!
+        setSelectedReport((prevSelected) => {
+          if (prevSelected) {
+            const updated = reportsData.find((r) => r.id === prevSelected.id);
+            return updated || prevSelected;
+          }
+          return null;
+        });
 
         const unratedReport = reportsData.find(
           (r) =>

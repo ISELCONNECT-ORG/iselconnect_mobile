@@ -178,6 +178,14 @@ function ReportTab({ isActive }) {
 
   const webcamRef = useRef(null);
 
+  // Check if selected report type is "Other / Not Specified"
+  const selectedReportTypeObj = reportTypes.find(
+    (rt) => rt.id.toString() === formData.report_type_id.toString(),
+  );
+  const isOtherSelected =
+    selectedReportTypeObj?.name?.toLowerCase().includes("other") ||
+    selectedReportTypeObj?.name?.toLowerCase().includes("not specified");
+
   useEffect(() => {
     if (!isActive) {
       setHasAcceptedGuidelines(false);
@@ -450,6 +458,13 @@ function ReportTab({ isActive }) {
     if (!formData.barangay_id) return setError("Please select a Barangay.");
     if (!formData.landmark.trim()) return setError("Please enter a Landmark.");
 
+    // 🌟 REQUIRE DESCRIPTION IF "OTHER / NOT SPECIFIED" IS SELECTED
+    if (isOtherSelected && !formData.description.trim()) {
+      return setError(
+        "Please specify the damage description for Other/Not Specified issues.",
+      );
+    }
+
     setIsSubmitting(true);
     setError("");
 
@@ -516,10 +531,7 @@ function ReportTab({ isActive }) {
           "Failed to save report to database: " + dbError.message,
         );
 
-      const typeName =
-        reportTypes.find(
-          (type) => type.id === parseInt(formData.report_type_id),
-        )?.name || "issue";
+      const typeName = selectedReportTypeObj?.name || "issue";
       await logSystemAction(
         "SUBMIT_REPORT",
         `Resident submitted a new ${typeName} report at ${formData.landmark.trim()}.`,
@@ -818,7 +830,6 @@ function ReportTab({ isActive }) {
                     description: "",
                   });
 
-                  // 🌟 STAYS ON REPORT TAB BUT ACTIVATES RATE LIMIT LOCKOUT SCREEN
                   setHasPendingReport(true);
                   setPendingReportDetails({
                     landmark: formData.landmark.trim(),
@@ -1150,13 +1161,24 @@ function ReportTab({ isActive }) {
               onChange={handleInputChange}
             />
 
+            {/* 🌟 DYNAMICALLY HIGHLIGHT DESCRIPTION IF "OTHER" IS SELECTED */}
             <input
               type="text"
               name="description"
               className="rounded-input"
-              placeholder={t.descOptional}
+              placeholder={
+                isOtherSelected
+                  ? "Describe the issue/damage (Required) *"
+                  : t.descOptional
+              }
               value={formData.description}
               onChange={handleInputChange}
+              style={{
+                border:
+                  isOtherSelected && !formData.description.trim()
+                    ? "2px solid #f59e0b"
+                    : "none",
+              }}
             />
           </div>
 

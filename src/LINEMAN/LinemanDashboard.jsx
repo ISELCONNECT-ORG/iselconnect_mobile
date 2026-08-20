@@ -5,6 +5,7 @@ import ReportTab from "./LinemanReportTab";
 import HistoryTab from "./LinemanHistoryTab";
 import NotificationTab from "./LinemanNotificationTab";
 import ProfileTab from "./LinemanProfileTab";
+import ForcePasswordChange from "./ForcePasswordChange"; // 🌟 NEW: Import the forced password screen
 import "../Lineman.css";
 
 import { List, Archive, Bell, User, Power } from "lucide-react";
@@ -14,12 +15,14 @@ function LinemanDashboard() {
   const [dutyStatus, setDutyStatus] = useState("Loading...");
   const [userId, setUserId] = useState(null);
 
-  // NEW: State for Timestamps
   const [dutyStartTime, setDutyStartTime] = useState(null);
   const [dutyEndTime, setDutyEndTime] = useState(null);
 
   const [hasEmployeeRow, setHasEmployeeRow] = useState(true);
   const [showOffDutyConfirm, setShowOffDutyConfirm] = useState(false);
+
+  // 🌟 NEW: State to trigger the forced password change overlay
+  const [needsPasswordChange, setNeedsPasswordChange] = useState(false);
 
   useEffect(() => {
     const fetchDutyStatus = async () => {
@@ -30,10 +33,10 @@ function LinemanDashboard() {
       if (user) {
         setUserId(user.id);
 
-        // UPDATED: Fetching the new timestamp columns
+        // 🌟 NEW: Added `is_first_login` to the select query
         const { data, error } = await supabase
           .from("employees")
-          .select("duty_status, duty_start_time, duty_end_time")
+          .select("duty_status, duty_start_time, duty_end_time, is_first_login")
           .eq("user_id", user.id)
           .maybeSingle();
 
@@ -46,6 +49,11 @@ function LinemanDashboard() {
           setDutyStartTime(data.duty_start_time);
           setDutyEndTime(data.duty_end_time);
           setHasEmployeeRow(true);
+
+          // 🌟 NEW: Check if this is their first login
+          if (data.is_first_login) {
+            setNeedsPasswordChange(true);
+          }
         } else {
           setDutyStatus("Off Duty");
           setHasEmployeeRow(false);
@@ -82,13 +90,11 @@ function LinemanDashboard() {
 
     setDutyStatus(newStatus);
 
-    // Prepare the update payload
     const updatePayload = {
       duty_status: newStatus,
       is_available: newStatus === "On Duty" ? true : false,
     };
 
-    // Append the correct timestamp based on the action
     if (newStatus === "On Duty") {
       updatePayload.duty_start_time = now;
       setDutyStartTime(now);
@@ -105,7 +111,6 @@ function LinemanDashboard() {
     if (error) {
       console.error("Error updating duty status:", error);
       alert("Failed to update status: " + error.message);
-      // Revert optimistic UI on error
       setDutyStatus(previousStatus);
       setDutyStartTime(previousStart);
       setDutyEndTime(previousEnd);
@@ -126,9 +131,18 @@ function LinemanDashboard() {
   return (
     <div
       className="lineman-dashboard-layout"
-      style={{ display: "flex", flexDirection: "column", height: "100vh" }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        position: "relative",
+      }}
     >
-      {/* --- CONFIRMATION MODAL --- */}
+      {/* 🌟 NEW: Forced Password Change Overlay */}
+      {needsPasswordChange && (
+        <ForcePasswordChange onComplete={() => setNeedsPasswordChange(false)} />
+      )}
+
       {showOffDutyConfirm && (
         <div className="success-modal-overlay" style={{ zIndex: 999999 }}>
           <div
@@ -194,7 +208,6 @@ function LinemanDashboard() {
         </div>
       )}
 
-      {/* Middle Wrapper */}
       <div
         key={activeTab}
         className="animate-tab-switch l-rt-tab"
@@ -205,7 +218,6 @@ function LinemanDashboard() {
           paddingBottom: "80px",
         }}
       >
-        {/* UPDATED: Pass timestamps to the Report Tab! */}
         {activeTab === "report" && (
           <ReportTab
             dutyStatus={dutyStatus}
@@ -220,7 +232,6 @@ function LinemanDashboard() {
         {activeTab === "profile" && <ProfileTab />}
       </div>
 
-      {/* 4-Item PERSISTENT BOTTOM NAVIGATION */}
       <div className="bottom-nav-wrapper">
         <div className="pill-nav">
           <button

@@ -294,14 +294,36 @@ function SignUp({ onBack }) {
       if (!formData.idNumber.trim())
         throw new Error("Please provide your ID Number.");
 
+      // 🌟 NEW: Pre-check if email already exists in the public users table
+      const { data: existingEmail } = await supabase
+        .from("users")
+        .select("id")
+        .ilike("email", formData.email.trim())
+        .maybeSingle();
+
+      if (existingEmail) {
+        throw new Error(
+          "This email is already registered. Please use another email or log in instead.",
+        );
+      }
+
+      // Proceed with normal auth signup
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email.trim(),
         password: formData.password,
       });
 
       if (authError) throw authError;
+
+      // 🌟 NEW: Supabase specific check for silent duplicate emails (enumeration disabled)
+      if (authData?.user?.identities && authData.user.identities.length === 0) {
+        throw new Error(
+          "This email is already registered. Please log in instead.",
+        );
+      }
+
       if (!authData?.user?.id)
-        throw new Error("Failed to create account. Email might already exist.");
+        throw new Error("Failed to create account. Please try again.");
 
       setSignupStep("otp");
     } catch (error) {

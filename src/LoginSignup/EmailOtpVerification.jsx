@@ -1,5 +1,6 @@
-import React from "react";
-import { Mail } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Mail, RefreshCw } from "lucide-react";
+import { supabase } from "../supabaseClient";
 
 export default function EmailOtpVerification({
   email,
@@ -8,6 +9,45 @@ export default function EmailOtpVerification({
   onVerifyOTP,
   loading,
 }) {
+  // 🌟 NEW: States for the resend timer and status messages
+  const [resendTimer, setResendTimer] = useState(60);
+  const [isResending, setIsResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState("");
+
+  // 🌟 NEW: Countdown timer effect
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [resendTimer]);
+
+  // 🌟 NEW: Handle the resend request to Supabase
+  const handleResendCode = async () => {
+    if (resendTimer > 0 || isResending) return;
+
+    setIsResending(true);
+    setResendStatus("");
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: email,
+      });
+
+      if (error) throw error;
+
+      setResendStatus("New code sent successfully!");
+      setResendTimer(60); // Restart the 60-second cooldown
+    } catch (error) {
+      setResendStatus(error.message || "Failed to resend code.");
+    } finally {
+      setIsResending(false);
+    }
+  };
+
   return (
     <div
       style={{
@@ -52,7 +92,10 @@ export default function EmailOtpVerification({
           <strong style={{ color: "#1b0b8c" }}>{email}</strong>
         </p>
 
-        <div className="auth-input-group" style={{ width: "100%" }}>
+        <div
+          className="auth-input-group"
+          style={{ width: "100%", marginBottom: "15px" }}
+        >
           <input
             type="text"
             name="otp"
@@ -68,6 +111,64 @@ export default function EmailOtpVerification({
               fontWeight: "bold",
             }}
           />
+        </div>
+
+        {/* 🌟 NEW: Resend Code Section */}
+        <div style={{ textAlign: "center", width: "100%" }}>
+          {resendStatus && (
+            <p
+              style={{
+                fontSize: "0.8rem",
+                fontWeight: "700",
+                color: resendStatus.includes("sent") ? "#16a34a" : "#dc2626",
+                margin: "0 0 10px 0",
+              }}
+            >
+              {resendStatus}
+            </p>
+          )}
+
+          <p
+            style={{
+              fontSize: "0.85rem",
+              color: "#64748b",
+              margin: 0,
+              fontWeight: "600",
+            }}
+          >
+            Didn't receive the code?
+          </p>
+
+          <button
+            type="button"
+            onClick={handleResendCode}
+            disabled={resendTimer > 0 || isResending}
+            style={{
+              background: "none",
+              border: "none",
+              color: resendTimer > 0 ? "#94a3b8" : "#1b0b8c",
+              fontWeight: "900",
+              fontSize: "0.85rem",
+              marginTop: "5px",
+              cursor: resendTimer > 0 ? "not-allowed" : "pointer",
+              textDecoration: resendTimer > 0 ? "none" : "underline",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+              width: "100%",
+            }}
+          >
+            {isResending ? (
+              "Sending..."
+            ) : resendTimer > 0 ? (
+              `Resend available in ${resendTimer}s`
+            ) : (
+              <>
+                <RefreshCw size={14} /> Resend Code
+              </>
+            )}
+          </button>
         </div>
       </div>
 

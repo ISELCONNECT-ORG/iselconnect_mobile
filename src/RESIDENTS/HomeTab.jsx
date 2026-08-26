@@ -20,7 +20,7 @@ function HomeTab() {
   useEffect(() => {
     fetchHomeData();
 
-    // 🌟 NEW: Listen to live changes on the reports table!
+    // Listen to live changes on the reports table!
     const channel = supabase
       .channel("public:home_reports_channel")
       .on(
@@ -56,10 +56,11 @@ function HomeTab() {
         setUserName(`${userData.first_name} ${userData.last_name}`);
       }
 
+      // 🌟 FETCHING NEW COLUMNS: resolution_time, purok_sitio, barangays, municipalities
       const { data: reportsData, error: reportsError } = await supabase
         .from("reports")
         .select(
-          `id, landmark, description, remarks, photo_url, resolved_photo_url, created_at, report_type_id, latitude, longitude, report_types ( name, priority_level ), report_statuses ( name ), report_ratings ( id )`,
+          `id, landmark, description, remarks, photo_url, resolved_photo_url, created_at, resolution_time, purok_sitio, report_type_id, latitude, longitude, report_types ( name, priority_level ), report_statuses ( name ), report_ratings ( id ), barangays ( name ), municipalities ( name )`,
         )
         .eq("residents_id", user.id)
         .order("created_at", { ascending: false });
@@ -67,7 +68,7 @@ function HomeTab() {
       if (!reportsError && reportsData) {
         setUserReports(reportsData);
 
-        // 🌟 NEW: Automatically update the open detail screen so it doesn't close!
+        // Automatically update the open detail screen so it doesn't close!
         setSelectedReport((prevSelected) => {
           if (prevSelected) {
             const updated = reportsData.find((r) => r.id === prevSelected.id);

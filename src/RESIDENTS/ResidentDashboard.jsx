@@ -161,8 +161,8 @@ function ResidentDashboard({ session, onLogout }) {
               <h3 className="modal-title">Registration Successful!</h3>
               <p className="modal-text">
                 Welcome to <strong>ISELCONNECT</strong>. Your resident profile
-                has been securely created. You can now report real-time power
-                interruptions directly to ISELCO-1.
+                has been securely created. Wait for the Admin to activate your
+                account.
               </p>
               <button
                 onClick={() => setShowWelcomeModal(false)}

@@ -13,6 +13,7 @@ import {
   Users,
   Trash2,
   Star,
+  Clock, // 🌟 Added Clock icon for the resolution time
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -23,7 +24,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
   const t = translations[currentLang];
 
-  // 🌟 NEW: Refs for scroll fixing & animation
   const layoutRef = useRef(null);
   const scrollContainerRef = useRef(null);
 
@@ -63,7 +63,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
     description: report.description || "",
   });
 
-  // 🌟 FIX: Force parent containers to instantly snap to the top
   useEffect(() => {
     const resetScroll = () => {
       window.scrollTo(0, 0);
@@ -593,7 +592,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
       className="detail-layout page-transition"
       style={{ overscrollBehavior: "none", backgroundColor: "#f8fafc" }}
     >
-      {/* 🌟 EXPERIMENTAL: Container Transform Style Override */}
       <style>{`
         @keyframes containerTransformExp {
           0% {
@@ -614,7 +612,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
         }
       `}</style>
 
-      {/* 🌟 RATE EXPERIENCE MODAL */}
       {showRateModal && (
         <SatisfactionSurveyModal
           report={report}
@@ -1044,6 +1041,47 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 );
               })}
             </div>
+
+            {/* 🌟 NEW: RESOLUTION TIME AT THE BOTTOM OF THE PROGRESS CARD */}
+            {isResolved && (
+              <div
+                style={{
+                  marginTop: "20px",
+                  paddingTop: "15px",
+                  borderTop: "2px dashed #f1f5f9",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "20px 10px 0 10px",
+                }}
+              >
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  <Clock size={16} color="#64748b" />
+                  <span
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "#64748b",
+                      fontWeight: "800",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    Resolution Time
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: "1rem",
+                    color: "#16a34a",
+                    fontWeight: "900",
+                  }}
+                >
+                  {report.resolution_time || "Not recorded"}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1129,16 +1167,34 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                   {t.processingMsg}
                 </p>
               )}
+
               <div>
                 <p className="rrd-field-label">{t.reportType}</p>
                 <p className="rrd-field-value">{currentReportTypeName}</p>
               </div>
               <hr className="rrd-hr" />
+
+              <div>
+                <p className="rrd-field-label">Incident Address</p>
+                <p className="rrd-field-value-normal">
+                  {[
+                    report.purok_sitio,
+                    report.barangays?.name,
+                    report.municipalities?.name,
+                    "Isabela",
+                  ]
+                    .filter(Boolean)
+                    .join(", ") || "Address not specified"}
+                </p>
+              </div>
+              <hr className="rrd-hr" />
+
               <div>
                 <p className="rrd-field-label">Landmark</p>
                 <p className="rrd-field-value-normal">{formData.landmark}</p>
               </div>
               <hr className="rrd-hr" />
+
               {report.latitude && report.longitude && (
                 <>
                   <div>
@@ -1153,6 +1209,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                   <hr className="rrd-hr" />
                 </>
               )}
+
               <div>
                 <p className="rrd-field-label">Description</p>
                 <p className="rrd-field-value-normal">
@@ -1225,7 +1282,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 </div>
               )}
 
-              {/* 🌟 RATE EXPERIENCE BUTTON (Visible if Resolved & Not yet rated) */}
               {isResolved && !hasRated && (
                 <button
                   onClick={() => setShowRateModal(true)}

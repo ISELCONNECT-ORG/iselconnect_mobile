@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
-import { Eye, EyeOff, ChevronLeft } from "lucide-react";
+import { Eye, EyeOff, ChevronLeft, AlertOctagon } from "lucide-react";
 import logo from "../assets/ISELCONNECT.png";
 import { logSystemAction } from "../utils/logger";
 import SignUp from "./SignUp";
@@ -18,10 +18,45 @@ function Auth({ onBack }) {
   const [errorMsg, setErrorMsg] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  // 🌟 NEW: Rate Limiting States
+  const [failedAttempts, setFailedAttempts] = useState(
+    () => parseInt(localStorage.getItem("login_attempts")) || 0,
+  );
+  const [lockoutTime, setLockoutTime] = useState(0); // Time remaining in seconds
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
+
+  // 🌟 NEW: Effect to handle the lockout countdown timer
+  useEffect(() => {
+    const checkLockout = () => {
+      const lockedUntil = localStorage.getItem("lockout_until");
+      if (lockedUntil) {
+        const remainingTime = Math.ceil(
+          (parseInt(lockedUntil) - Date.now()) / 1000,
+        );
+        if (remainingTime > 0) {
+          setLockoutTime(remainingTime);
+        } else {
+          // Lockout period has ended
+          setLockoutTime(0);
+          setFailedAttempts(0);
+          localStorage.removeItem("lockout_until");
+          localStorage.removeItem("login_attempts");
+          setErrorMsg(""); // Clear the lockout error
+        }
+      }
+    };
+
+    // Check immediately on mount
+    checkLockout();
+
+    // Set up a 1-second interval to update the countdown
+    const interval = setInterval(checkLockout, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -30,6 +65,10 @@ function Auth({ onBack }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Prevent submission if currently locked out
+    if (lockoutTime > 0) return;
+
     setLoading(true);
     setErrorMsg("");
 
@@ -39,6 +78,7 @@ function Auth({ onBack }) {
         .select("role_id")
         .ilike("email", formData.email.trim())
         .maybeSingle();
+
       if (!preCheckUser) throw new Error("Account not found in the system.");
 
       const { error: authError } = await supabase.auth.signInWithPassword({
@@ -47,6 +87,11 @@ function Auth({ onBack }) {
       });
       if (authError) throw authError;
 
+      // 🌟 SUCCESS: Reset rate limit counters immediately!
+      localStorage.removeItem("login_attempts");
+      localStorage.removeItem("lockout_until");
+      setFailedAttempts(0);
+
       const roleName =
         preCheckUser.role_id === 7 ? "Resident" : "Lineman/Staff";
       await logSystemAction(
@@ -54,7 +99,24 @@ function Auth({ onBack }) {
         `${roleName} logged into the application successfully.`,
       );
     } catch (error) {
-      setErrorMsg(error.message);
+      // 🌟 FAILED LOGIN: Handle Rate Limiting Logic
+      const newAttempts = failedAttempts + 1;
+      setFailedAttempts(newAttempts);
+      localStorage.setItem("login_attempts", newAttempts.toString());
+
+      if (newAttempts >= 5) {
+        // Trigger 60-second lockout
+        const lockUntil = Date.now() + 60 * 1000;
+        localStorage.setItem("lockout_until", lockUntil.toString());
+        setLockoutTime(60);
+        setErrorMsg("Too many failed attempts. Account temporarily locked.");
+      } else {
+        // Show remaining attempts
+        const attemptsLeft = 5 - newAttempts;
+        setErrorMsg(
+          `${error.message} (${attemptsLeft} attempt${attemptsLeft === 1 ? "" : "s"} remaining)`,
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -73,6 +135,8 @@ function Auth({ onBack }) {
       />
     );
   }
+
+  const isLocked = lockoutTime > 0;
 
   return (
     <div
@@ -150,26 +214,39 @@ function Auth({ onBack }) {
           ></div>
         </div>
 
+        {/* Dynamic Error / Lockout Message Box */}
         {errorMsg && (
           <div
             style={{
-              backgroundColor: "#fee2e2",
+              backgroundColor: isLocked ? "#fef2f2" : "#fee2e2",
               color: "#ef4444",
-              padding: "10px",
-              borderRadius: "10px",
+              border: isLocked ? "2px solid #fca5a5" : "none",
+              padding: "12px",
+              borderRadius: "12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
               textAlign: "center",
-              fontWeight: "bold",
+              fontWeight: "900",
               fontSize: "0.85rem",
               marginBottom: "15px",
+              animation: isLocked ? "pulse 2s infinite" : "none",
             }}
           >
+            {isLocked && <AlertOctagon size={18} />}
             {errorMsg}
           </div>
         )}
 
         <form
           onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column" }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            opacity: isLocked ? 0.6 : 1,
+            transition: "opacity 0.3s ease",
+          }}
         >
           <div
             style={{
@@ -196,15 +273,17 @@ function Auth({ onBack }) {
               value={formData.email}
               onChange={handleInputChange}
               required
+              disabled={isLocked || loading}
               style={{
                 padding: "15px 20px",
                 borderRadius: "30px",
                 border: "none",
                 fontSize: "1rem",
                 outline: "none",
-                backgroundColor: "#ffffff",
+                backgroundColor: isLocked ? "#f1f5f9" : "#ffffff",
                 color: "#334155",
                 fontFamily: "inherit",
+                cursor: isLocked ? "not-allowed" : "text",
               }}
             />
           </div>
@@ -241,6 +320,7 @@ function Auth({ onBack }) {
                 value={formData.password}
                 onChange={handleInputChange}
                 required
+                disabled={isLocked || loading}
                 style={{
                   width: "100%",
                   padding: "15px 20px",
@@ -248,15 +328,17 @@ function Auth({ onBack }) {
                   border: "none",
                   fontSize: "1rem",
                   outline: "none",
-                  backgroundColor: "#ffffff",
+                  backgroundColor: isLocked ? "#f1f5f9" : "#ffffff",
                   color: "#334155",
                   boxSizing: "border-box",
                   fontFamily: "inherit",
+                  cursor: isLocked ? "not-allowed" : "text",
                 }}
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
+                onClick={() => !isLocked && setShowPassword(!showPassword)}
+                disabled={isLocked}
                 style={{
                   position: "absolute",
                   right: "15px",
@@ -264,8 +346,9 @@ function Auth({ onBack }) {
                   border: "none",
                   display: "flex",
                   alignItems: "center",
-                  cursor: "pointer",
+                  cursor: isLocked ? "not-allowed" : "pointer",
                   padding: 0,
+                  opacity: isLocked ? 0.5 : 1,
                 }}
               >
                 {showPassword ? (
@@ -286,8 +369,9 @@ function Auth({ onBack }) {
           >
             <button
               type="button"
+              disabled={isLocked}
               onClick={() => {
-                localStorage.setItem("recovery_in_progress", "true"); // Save flag immediately!
+                localStorage.setItem("recovery_in_progress", "true");
                 setShowForgotPassword(true);
                 setErrorMsg("");
               }}
@@ -296,7 +380,7 @@ function Auth({ onBack }) {
                 border: "none",
                 color: "#cbd5e1",
                 fontWeight: "600",
-                cursor: "pointer",
+                cursor: isLocked ? "not-allowed" : "pointer",
                 fontSize: "0.85rem",
                 padding: 0,
                 textDecoration: "underline",
@@ -310,23 +394,30 @@ function Auth({ onBack }) {
           <div style={{ padding: "0 10px" }}>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || isLocked}
               style={{
                 width: "100%",
-                backgroundColor: "#ffffff",
-                color: "#1b0b8c",
+                backgroundColor: isLocked ? "#cbd5e1" : "#ffffff",
+                color: isLocked ? "#475569" : "#1b0b8c",
                 padding: "15px",
                 borderRadius: "30px",
                 fontWeight: "900",
                 fontSize: "1.1rem",
                 border: "none",
-                cursor: loading ? "not-allowed" : "pointer",
-                boxShadow: "0 0 0 2px #1b0b8c, 0 0 0 4px #ffffff",
-                opacity: loading ? 0.7 : 1,
+                cursor: loading || isLocked ? "not-allowed" : "pointer",
+                boxShadow: isLocked
+                  ? "none"
+                  : "0 0 0 2px #1b0b8c, 0 0 0 4px #ffffff",
+                opacity: loading || isLocked ? 0.8 : 1,
                 fontFamily: "inherit",
+                transition: "all 0.2s ease",
               }}
             >
-              {loading ? "Processing..." : "Login"}
+              {isLocked
+                ? `Try again in ${lockoutTime}s`
+                : loading
+                  ? "Processing..."
+                  : "Login"}
             </button>
           </div>
 
@@ -342,6 +433,7 @@ function Auth({ onBack }) {
               Don't have an account?{" "}
               <button
                 type="button"
+                disabled={isLocked}
                 onClick={() => {
                   setShowSignUp(true);
                   setErrorMsg("");
@@ -349,12 +441,12 @@ function Auth({ onBack }) {
                 style={{
                   background: "none",
                   border: "none",
-                  color: "#facc15",
+                  color: isLocked ? "#94a3b8" : "#facc15",
                   fontWeight: "900",
-                  cursor: "pointer",
+                  cursor: isLocked ? "not-allowed" : "pointer",
                   fontSize: "0.9rem",
                   padding: 0,
-                  textDecoration: "underline",
+                  textDecoration: isLocked ? "none" : "underline",
                   fontFamily: "inherit",
                 }}
               >
@@ -369,6 +461,10 @@ function Auth({ onBack }) {
         @keyframes slideUpFade {
           from { opacity: 0; transform: translateY(30px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.8; }
         }
       `}</style>
     </div>

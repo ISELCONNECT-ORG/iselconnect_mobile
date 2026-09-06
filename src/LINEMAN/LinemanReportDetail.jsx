@@ -959,13 +959,42 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         </div>
 
         <div className="detail-info-section">
-          <p>
+          <p style={{ marginBottom: "10px" }}>
+            <strong>INCIDENT ADDRESS:</strong>{" "}
+            {[
+              report.purok_sitio,
+              report.barangays?.name,
+              report.municipalities?.name,
+              "Isabela",
+            ]
+              .filter(Boolean)
+              .join(", ") || "Address not specified"}
+          </p>
+          <p style={{ marginBottom: "10px" }}>
             <strong>{t.descriptionLabel}</strong>{" "}
             {report.description || t.noDescProvided}
           </p>
-          <p>
+          <p style={{ marginBottom: "10px" }}>
             <strong>{t.landmarkLabel}</strong> {report.landmark || "N/A"}
           </p>
+
+          {/* Resolution Time will only appear if it has a value */}
+          {report.resolution_time && (
+            <div
+              style={{
+                marginTop: "12px",
+                paddingTop: "12px",
+                borderTop: "1px dashed #cbd5e1",
+              }}
+            >
+              <p style={{ margin: 0 }}>
+                <strong>RESOLUTION TIME:</strong>{" "}
+                <span style={{ color: "#16a34a", fontWeight: "900" }}>
+                  {report.resolution_time}
+                </span>
+              </p>
+            </div>
+          )}
         </div>
 
         <div

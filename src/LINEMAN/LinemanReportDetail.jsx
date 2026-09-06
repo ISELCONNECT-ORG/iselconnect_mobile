@@ -45,14 +45,11 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     report.report_statuses?.name?.toUpperCase() || "PENDING",
   );
 
-  const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isRemarksOpen, setIsRemarksOpen] = useState(false);
   const [evidencePhoto, setEvidencePhoto] = useState(null);
   const [resolutionRemarks, setResolutionRemarks] = useState("");
-
   const [showMap, setShowMap] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -61,7 +58,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const [loadingAssignmentDetails, setLoadingAssignmentDetails] =
     useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
-
   const [linemanLocation, setLinemanLocation] = useState(null);
 
   const isResolved =
@@ -69,7 +65,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const isPendingVerification = activeStatus === "PENDING VERIFICATION";
   const isLocked = isResolved || isPendingVerification;
 
-  // 🌟 NEW: Listen for Admin Status Changes live!
   useEffect(() => {
     const channel = supabase
       .channel(`public:lineman_report_${report.id}`)
@@ -82,7 +77,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           filter: `id=eq.${report.id}`,
         },
         async () => {
-          // Fetch the fresh status if an admin clicks approve/verify
           const { data } = await supabase
             .from("reports")
             .select("report_statuses(name)")
@@ -188,7 +182,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
 
           activeWatchId = await Geolocation.watchPosition(
             { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
-            async (pos, err) => {
+            async (pos) => {
               if (pos) {
                 setLinemanLocation({
                   lat: pos.coords.latitude,
@@ -374,7 +368,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
 
   const handleVerifyClick = () => {
     if (isLocked) return;
-    setPendingStatusUpdate("PENDING VERIFICATION");
     setIsCameraOpen(true);
   };
 
@@ -442,7 +435,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     } finally {
       setIsSubmitting(false);
       setIsRemarksOpen(false);
-      setPendingStatusUpdate(null);
     }
   };
 
@@ -588,10 +580,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           }}
         >
           <button
-            onClick={() => {
-              setIsCameraOpen(false);
-              setPendingStatusUpdate(null);
-            }}
+            onClick={() => setIsCameraOpen(false)}
             style={{
               background: "transparent",
               border: "none",
@@ -978,7 +967,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             <strong>{t.landmarkLabel}</strong> {report.landmark || "N/A"}
           </p>
 
-          {/* Resolution Time will only appear if it has a value */}
           {report.resolution_time && (
             <div
               style={{

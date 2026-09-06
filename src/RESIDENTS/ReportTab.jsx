@@ -735,7 +735,7 @@ function ReportTab({ isActive }) {
               fontSize: "1.35rem",
             }}
           >
-            Pending Report Under Review
+            {t.pendingReportReviewTitle}
           </h2>
 
           <p
@@ -747,10 +747,9 @@ function ReportTab({ isActive }) {
               textAlign: "center",
             }}
           >
-            You currently have a report awaiting initial admin review at{" "}
+            {t.pendingReportReviewDesc1}{" "}
             <strong>{pendingReportDetails?.landmark || "your location"}</strong>
-            . Please wait for an administrator to review and approve your
-            submission before filing a new one.
+            . {t.pendingReportReviewDesc2}
           </p>
 
           <div
@@ -773,7 +772,9 @@ function ReportTab({ isActive }) {
               }}
             >
               Status:{" "}
-              <strong style={{ color: "#d97706" }}>PENDING ADMIN REVIEW</strong>
+              <strong style={{ color: "#d97706" }}>
+                {t.pendingAdminReview}
+              </strong>
             </span>
           </div>
         </div>

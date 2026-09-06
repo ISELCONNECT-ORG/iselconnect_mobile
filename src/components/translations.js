@@ -1,6 +1,5 @@
 export const translations = {
   English: {
-
     // ================= LINEMAN SPECIFIC =================
     account: "Account",
     logoutAccount: "Log Out Account",
@@ -23,6 +22,7 @@ export const translations = {
     landmarkLabel: "LANDMARK:",
     adminRemarks: "ADMIN DISPATCH REMARKS",
     assignedCompanions: "ASSIGNED COMPANIONS",
+    assignedPersonnel: "Assigned Personnel",
     loadingTeam: "Loading team members...",
     onlyLineman: "You are currently the only lineman assigned to this report.",
     evidenceReady: "EVIDENCE READY",
@@ -45,7 +45,6 @@ export const translations = {
     noGeneralReports: "No general reports in your branch.",
     resolvedReportsTitle: "RESOLVED REPORTS",
     noResolvedReports: "No resolved reports found.",
-
 
     // ================= SETTINGS TAB =================
     settingsTitle: "SETTINGS",
@@ -129,6 +128,12 @@ export const translations = {
     reportReview: "Your report is now under review",
     evidenceCamera: "EVIDENCE CAMERA",
 
+    // 🌟 PENDING REPORT BLOCKER SCREEN 🌟
+    pendingReportReviewTitle: "Pending Report Under Review",
+    pendingReportReviewDesc1: "You currently have a report awaiting initial admin review at",
+    pendingReportReviewDesc2: "Please wait for an administrator to review and approve your submission before filing a new one.",
+    pendingAdminReview: "PENDING ADMIN REVIEW",
+
     // ================= REPORT DETAILS =================
     editReportTitle: "EDIT REPORT",
     reportDetailsTitle: "REPORT DETAILS",
@@ -139,16 +144,20 @@ export const translations = {
     processingMsg: "This report is currently being processed and can no longer be edited.",
     coordinatesLabel: "Coordinates",
     noDescProvided: "No description provided.",
-    fixedEvidence: "FIXED EVIDENCE"
+    fixedEvidence: "FIXED EVIDENCE",
+    
+    incidentAddress: "INCIDENT ADDRESS:",
+    addressNotSpecified: "Address not specified",
+    resolutionTime: "RESOLUTION TIME",
+    notRecorded: "Not recorded",
+    liveTrackingActive: "LIVE TRACKING ACTIVE",
+    rateExperience: "Rate Experience",
+    proofOfResolution: "Proof of Resolution",
+    viewProofOfResolution: "View Proof of Resolution",
+    waitingForAdminVerification: "Waiting for Admin Verification"
   },
   
-
-
-
-
-
   Tagalog: {
-
     // ================= LINEMAN SPECIFIC =================
     account: "Account",
     logoutAccount: "Mag-log Out ng Account",
@@ -171,6 +180,7 @@ export const translations = {
     landmarkLabel: "LANDMARK:",
     adminRemarks: "MGA PUNA NG ADMIN DISPATCH",
     assignedCompanions: "MGA KASAMANG NAKA-ASSIGN",
+    assignedPersonnel: "Mga Nakatalagang Tauhan",
     loadingTeam: "Nilo-load ang mga miyembro ng koponan...",
     onlyLineman: "Ikaw lamang ang lineman na nakatalaga sa ulat na ito sa ngayon.",
     evidenceReady: "HANDA NA ANG EBIDENSYA",
@@ -276,6 +286,12 @@ export const translations = {
     reportReview: "Ang iyong ulat ay sinusuri na",
     evidenceCamera: "KAMERA NG EBIDENSYA",
 
+    // 🌟 PENDING REPORT BLOCKER SCREEN 🌟
+    pendingReportReviewTitle: "Nakasailalim sa Pagsusuri ang Ulat",
+    pendingReportReviewDesc1: "Kasalukuyan kang may ulat na naghihintay ng inisyal na pagsusuri ng admin sa",
+    pendingReportReviewDesc2: "Mangyaring maghintay na suriin at aprubahan ng administrator ang iyong isinumite bago magpasa ng bago.",
+    pendingAdminReview: "NAGHIHINTAY NG PAGSUSURI NG ADMIN",
+
     // ================= REPORT DETAILS =================
     editReportTitle: "I-EDIT ANG ULAT",
     reportDetailsTitle: "DETALYE NG ULAT",
@@ -286,6 +302,16 @@ export const translations = {
     processingMsg: "Ang ulat na ito ay kasalukuyang pinoproseso at hindi na maaaring i-edit.",
     coordinatesLabel: "Mga Coordinate",
     noDescProvided: "Walang ibinigay na deskripsyon.",
-    fixedEvidence: "EBIDENSYA NG PAG-AAYOS"
+    fixedEvidence: "EBIDENSYA NG PAG-AAYOS",
+
+    incidentAddress: "ADDRESS NG INSIDENTE:",
+    addressNotSpecified: "Hindi tinukoy ang address",
+    resolutionTime: "ORAS NG RESOLUSYON",
+    notRecorded: "Hindi naitala",
+    liveTrackingActive: "AKTIBO ANG LIVE TRACKING",
+    rateExperience: "I-rate ang Karanasan",
+    proofOfResolution: "Katibayan ng Pag-aayos",
+    viewProofOfResolution: "Tingnan ang Katibayan ng Pag-aayos",
+    waitingForAdminVerification: "Naghihintay ng Beripikasyon ng Admin"
   }
 };

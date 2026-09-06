@@ -13,7 +13,8 @@ import {
   Users,
   Trash2,
   Star,
-  Clock, // 🌟 Added Clock icon for the resolution time
+  Clock,
+  Image as ImageIcon,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -33,6 +34,8 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
+
+  const [showEvidence, setShowEvidence] = useState(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -54,8 +57,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
     statusName,
   );
   const hasRated = report.report_ratings && report.report_ratings.length > 0;
-
-  const showMapButton = isPending || isInProgress;
 
   const [formData, setFormData] = useState({
     report_type_id: report.report_type_id || "",
@@ -122,12 +123,15 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
       };
       fetchTypes();
     }
+  }, [isPending]);
+
+  useEffect(() => {
     const navBar = document.querySelector(".bottom-nav-wrapper");
     if (navBar) navBar.style.display = "none";
     return () => {
       if (navBar) navBar.style.display = "";
     };
-  }, [isPending]);
+  }, []);
 
   useEffect(() => {
     if (!isInProgress) return;
@@ -470,6 +474,81 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
     badgeStyle = { backgroundColor: "#fee2e2", color: "#dc2626" };
   }
 
+  if (showEvidence) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "#000000",
+          zIndex: 99999,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "20px 15px",
+            background: "#16a34a",
+            flexShrink: 0,
+          }}
+        >
+          <button
+            onClick={() => setShowEvidence(false)}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <ChevronLeft size={32} color="#fff" />
+          </button>
+          <span
+            style={{
+              color: "#fff",
+              fontWeight: "900",
+              marginLeft: "10px",
+              letterSpacing: "1px",
+              fontSize: "1rem",
+              textTransform: "uppercase",
+            }}
+          >
+            {t.fixedEvidence || "Proof of Resolution"}
+          </span>
+        </div>
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "20px",
+          }}
+        >
+          <img
+            src={report.resolved_photo_url}
+            alt="Resolved Evidence"
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              objectFit: "contain",
+              borderRadius: "10px",
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (showMap) {
     return (
       <div
@@ -590,7 +669,13 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
     <div
       ref={layoutRef}
       className="detail-layout page-transition"
-      style={{ overscrollBehavior: "none", backgroundColor: "#f8fafc" }}
+      style={{
+        overscrollBehavior: "none",
+        backgroundColor: "#f8fafc",
+        display: "flex",
+        flexDirection: "column",
+        height: "100dvh",
+      }}
     >
       <style>{`
         @keyframes containerTransformExp {
@@ -764,9 +849,11 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
         </div>
       )}
 
+      {/* Main Scrollable Content */}
       <div
         ref={scrollContainerRef}
         className="detail-scrollable-content rrd-scrollable"
+        style={{ flex: 1, overflowY: "auto" }}
       >
         <div className="detail-header">
           <button
@@ -777,7 +864,11 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           >
             <ChevronLeft size={28} strokeWidth={3} />
           </button>
-          <h2>{isEditing ? t.editReportTitle : t.reportDetailsTitle}</h2>
+          <h2 style={{ textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            {isEditing
+              ? t.editReportTitle
+              : report.report_types?.name || t.reportDetailsTitle}
+          </h2>
         </div>
 
         <div className="detail-photo-section rrd-mb-20">
@@ -826,91 +917,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           </div>
         )}
 
-        {showMapButton && (
-          <button
-            onClick={() => setShowMap(true)}
-            style={{
-              width: "100%",
-              padding: "16px",
-              backgroundColor: "#1b0b8c",
-              color: "#ffffff",
-              border: "none",
-              borderRadius: "50px",
-              fontWeight: "900",
-              fontSize: "1rem",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: "10px",
-              cursor: "pointer",
-              boxShadow: "0 6px 15px rgba(27, 11, 140, 0.2)",
-              transition: "transform 0.1s",
-              marginBottom: "20px",
-            }}
-          >
-            <MapPin size={22} />
-            {t.viewLocationMap}
-          </button>
-        )}
-
-        {assignedLinemen.length > 0 && (
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              borderRadius: "16px",
-              padding: "20px 15px",
-              marginBottom: "20px",
-              boxShadow: "0 4px 10px rgba(0,0,0,0.04)",
-              border: "1px solid #f1f5f9",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                marginBottom: "12px",
-              }}
-            >
-              <Users size={20} color="#1b0b8c" />
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: "1rem",
-                  color: "#1e293b",
-                  fontWeight: "900",
-                }}
-              >
-                Assigned Personnel
-              </h3>
-            </div>
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: "15px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "6px",
-                listStyleType: "square",
-                color: "#1b0b8c",
-              }}
-            >
-              {assignedLinemen.map((name, idx) => (
-                <li
-                  key={idx}
-                  style={{
-                    fontSize: "0.9rem",
-                    color: "#475569",
-                    fontWeight: "700",
-                  }}
-                >
-                  {name}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
+        {/* 🌟 NEW: Report Progress Timeline moved here! */}
         {statusName !== "REJECTED" && (
           <div
             style={{
@@ -1042,7 +1049,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
               })}
             </div>
 
-            {/* 🌟 NEW: RESOLUTION TIME AT THE BOTTOM OF THE PROGRESS CARD */}
             {isResolved && (
               <div
                 style={{
@@ -1085,7 +1091,95 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           </div>
         )}
 
-        <div className="detail-info-section rrd-info-section">
+        {/* Combined Location Map & Coordinates Card */}
+        <div
+          style={{
+            backgroundColor: "#ffffff",
+            borderRadius: "16px",
+            padding: "16px",
+            marginBottom: "20px",
+            boxShadow: "0 4px 10px rgba(0,0,0,0.04)",
+            border: "1px solid #f1f5f9",
+          }}
+        >
+          <button
+            onClick={() => setShowMap(true)}
+            style={{
+              width: "100%",
+              padding: "14px",
+              backgroundColor: "#1b0b8c",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "12px",
+              fontWeight: "900",
+              fontSize: "1rem",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "10px",
+              cursor: "pointer",
+              transition: "transform 0.1s",
+            }}
+          >
+            <MapPin size={22} />
+            {t.viewLocationMap}
+          </button>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginTop: "12px",
+              padding: "0 5px",
+              fontSize: "0.85rem",
+              color: "#475569",
+            }}
+          >
+            <span>
+              <strong style={{ color: "#1e293b", fontWeight: "900" }}>
+                LO:
+              </strong>{" "}
+              {report.longitude || "N/A"}
+            </span>
+            <span>
+              <strong style={{ color: "#1e293b", fontWeight: "900" }}>
+                LA:
+              </strong>{" "}
+              {report.latitude || "N/A"}
+            </span>
+          </div>
+        </div>
+
+        {report.resolved_photo_url && (
+          <button
+            onClick={() => setShowEvidence(true)}
+            style={{
+              width: "100%",
+              padding: "16px",
+              backgroundColor: "#16a34a",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "50px",
+              fontWeight: "900",
+              fontSize: "1rem",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "10px",
+              cursor: "pointer",
+              boxShadow: "0 6px 15px rgba(22, 163, 74, 0.2)",
+              transition: "transform 0.1s",
+              marginBottom: "20px",
+            }}
+          >
+            <ImageIcon size={22} />
+            {t.fixedEvidence || "View Proof of Resolution"}
+          </button>
+        )}
+
+        <div
+          className="detail-info-section rrd-info-section"
+          style={{ marginBottom: "20px" }}
+        >
           <div className="rrd-status-row">
             <h3 className="rrd-status-label">{t.statusLabel}</h3>
             <span
@@ -1136,18 +1230,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                   className="edit-input rrd-textarea"
                 />
               </div>
-              <div className="rrd-btn-row">
-                <button onClick={handleCancelEdit} className="rrd-btn-cancel">
-                  <X size={20} /> {t.cancelBtn}
-                </button>
-                <button
-                  onClick={handleUpdateReport}
-                  disabled={loading}
-                  className="rrd-btn-save"
-                >
-                  <Save size={20} /> {loading ? t.savingBtn : t.saveBtn}
-                </button>
-              </div>
             </div>
           ) : (
             <div className="rrd-view-wrapper">
@@ -1195,21 +1277,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
               </div>
               <hr className="rrd-hr" />
 
-              {report.latitude && report.longitude && (
-                <>
-                  <div>
-                    <p className="rrd-field-label">{t.coordinatesLabel}</p>
-                    <p
-                      className="rrd-field-value-normal"
-                      style={{ fontFamily: "monospace", color: "#64748b" }}
-                    >
-                      {report.latitude}, {report.longitude}
-                    </p>
-                  </div>
-                  <hr className="rrd-hr" />
-                </>
-              )}
-
               <div>
                 <p className="rrd-field-label">Description</p>
                 <p className="rrd-field-value-normal">
@@ -1217,69 +1284,22 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 </p>
               </div>
 
-              {isPending && (
-                <div
-                  style={{ display: "flex", gap: "10px", marginTop: "15px" }}
-                >
-                  <button
-                    onClick={handleEditClick}
-                    className="rrd-edit-btn"
-                    style={{
-                      flex: 1,
-                      margin: 0,
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      gap: "6px",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    <Edit2 size={18} strokeWidth={2.5} />
-                    <span style={{ paddingTop: "2px" }}>
-                      {t.editReportTitle}
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    disabled={loading}
-                    className="rrd-edit-btn"
-                    style={{
-                      flex: 1,
-                      margin: 0,
-                      backgroundColor: "#fee2e2",
-                      color: "#dc2626",
-                      border: "2px solid #fecaca",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      gap: "6px",
-                      cursor: loading ? "not-allowed" : "pointer",
-                      opacity: loading ? 0.7 : 1,
-                      transition: "all 0.2s ease",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    <Trash2 size={18} strokeWidth={2.5} />
-                    <span style={{ paddingTop: "2px" }}>
-                      {loading ? "Deleting..." : "Delete"}
-                    </span>
-                  </button>
-                </div>
-              )}
-
-              {report.resolved_photo_url && (
-                <div className="rrd-evidence-box">
-                  <div className="rrd-evidence-header">
-                    <CheckCircle size={20} color="#16a34a" />
-                    <h3 className="rrd-evidence-title">{t.fixedEvidence}</h3>
+              {assignedLinemen.length > 0 && (
+                <>
+                  <hr className="rrd-hr" />
+                  <div>
+                    <p className="rrd-field-label">Assigned Personnel</p>
+                    {assignedLinemen.map((name, idx) => (
+                      <p
+                        key={idx}
+                        className="rrd-field-value-normal"
+                        style={{ marginBottom: "2px", fontWeight: "700" }}
+                      >
+                        • {name}
+                      </p>
+                    ))}
                   </div>
-                  <img
-                    src={report.resolved_photo_url}
-                    alt="Resolved Issue Evidence"
-                    className="rrd-evidence-img"
-                  />
-                </div>
+                </>
               )}
 
               {isResolved && !hasRated && (
@@ -1300,7 +1320,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                     gap: "8px",
                     cursor: "pointer",
                     boxShadow: "0 6px 15px rgba(250, 204, 21, 0.35)",
-                    marginTop: "20px",
+                    marginTop: "15px",
                     transition: "transform 0.1s ease",
                     textTransform: "uppercase",
                     letterSpacing: "0.5px",
@@ -1319,6 +1339,127 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
             </div>
           )}
         </div>
+      </div>
+
+      <div
+        style={{
+          position: "sticky",
+          bottom: 0,
+          padding: "15px 20px calc(15px + env(safe-area-inset-bottom)) 20px",
+          backgroundColor: "#ffffff",
+          borderTop: "1px solid #e2e8f0",
+          display: "flex",
+          gap: "12px",
+          boxShadow: "0 -4px 15px rgba(0,0,0,0.03)",
+          zIndex: 100,
+        }}
+      >
+        {isEditing ? (
+          <>
+            <button
+              onClick={handleCancelEdit}
+              style={{
+                flex: 1,
+                margin: 0,
+                backgroundColor: "#f1f5f9",
+                color: "#475569",
+                border: "none",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "6px",
+                textTransform: "uppercase",
+                fontWeight: "900",
+                borderRadius: "50px",
+                padding: "14px",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+            >
+              <X size={20} /> {t.cancelBtn}
+            </button>
+            <button
+              onClick={handleUpdateReport}
+              disabled={loading}
+              style={{
+                flex: 1,
+                margin: 0,
+                backgroundColor: "#1b0b8c",
+                color: "#ffffff",
+                border: "none",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "6px",
+                textTransform: "uppercase",
+                fontWeight: "900",
+                borderRadius: "50px",
+                padding: "14px",
+                cursor: loading ? "not-allowed" : "pointer",
+                opacity: loading ? 0.7 : 1,
+                transition: "all 0.2s ease",
+              }}
+            >
+              <Save size={20} /> {loading ? t.savingBtn : t.saveBtn}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={handleEditClick}
+              disabled={!isPending || loading}
+              style={{
+                flex: 1,
+                margin: 0,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "6px",
+                textTransform: "uppercase",
+                backgroundColor: !isPending ? "#f8fafc" : "#e0e7ff",
+                color: !isPending ? "#94a3b8" : "#3730a3",
+                border: "none",
+                cursor: !isPending || loading ? "not-allowed" : "pointer",
+                opacity: !isPending || loading ? 0.6 : 1,
+                fontWeight: "900",
+                borderRadius: "50px",
+                padding: "14px",
+                transition: "all 0.2s ease",
+              }}
+            >
+              <Edit2 size={18} strokeWidth={2.5} />
+              <span style={{ paddingTop: "2px" }}>{t.editReportTitle}</span>
+            </button>
+
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={!isPending || loading}
+              style={{
+                flex: 1,
+                margin: 0,
+                backgroundColor: !isPending ? "#f8fafc" : "#fee2e2",
+                color: !isPending ? "#94a3b8" : "#dc2626",
+                border: "none",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "6px",
+                cursor: !isPending || loading ? "not-allowed" : "pointer",
+                opacity: !isPending || loading ? 0.6 : 1,
+                transition: "all 0.2s ease",
+                textTransform: "uppercase",
+                fontWeight: "900",
+                borderRadius: "50px",
+                padding: "14px",
+              }}
+            >
+              <Trash2 size={18} strokeWidth={2.5} />
+              <span style={{ paddingTop: "2px" }}>
+                {loading ? "Deleting..." : "Delete"}
+              </span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

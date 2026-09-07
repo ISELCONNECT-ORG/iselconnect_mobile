@@ -770,6 +770,8 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               padding: "15px",
               borderRadius: "15px",
               border: "1px solid #cbd5e1",
+              backgroundColor: "#ffffff",
+              color: "#1e293b",
               fontSize: "1rem",
               resize: "none",
               marginBottom: "20px",

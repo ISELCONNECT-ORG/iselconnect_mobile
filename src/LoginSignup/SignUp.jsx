@@ -735,7 +735,6 @@ function SignUp({ onBack }) {
               animation: "contentFade 0.3s ease-out",
             }}
           >
-            {/* 🌟 FIXED: Removed inline flex/overflow restrictions so the whole page scrolls */}
             <div
               style={{
                 display: "flex",
@@ -744,6 +743,19 @@ function SignUp({ onBack }) {
                 marginBottom: "15px",
               }}
             >
+              <div className="auth-input-group">
+                <input
+                  type="text"
+                  name="idNumber"
+                  placeholder="ID Number"
+                  value={formData.idNumber}
+                  onChange={handleInputChange}
+                  required
+                  className="auth-input"
+                  style={{ padding: "14px 20px" }}
+                />
+              </div>
+
               <div className="auth-input-group">
                 <input
                   type="text"
@@ -783,46 +795,6 @@ function SignUp({ onBack }) {
               </div>
 
               <div className="auth-input-group">
-                <input
-                  type="text"
-                  name="idNumber"
-                  placeholder="ID Number"
-                  value={formData.idNumber}
-                  onChange={handleInputChange}
-                  required
-                  className="auth-input"
-                  style={{ padding: "14px 20px" }}
-                />
-              </div>
-
-              <div className="auth-input-group">
-                <input
-                  type="text"
-                  name="purokSitio"
-                  placeholder="Purok"
-                  value={formData.purokSitio}
-                  onChange={handleInputChange}
-                  className="auth-input"
-                  style={{ padding: "14px 20px" }}
-                />
-              </div>
-
-              <div className="auth-input-group">
-                <SearchableDropdown
-                  name="barangay_id"
-                  options={barangays}
-                  value={formData.barangay_id}
-                  onChange={handleInputChange}
-                  placeholder={
-                    !formData.municipality_id
-                      ? "Select Municipality First"
-                      : "Barangay"
-                  }
-                  disabled={!formData.municipality_id || isOtherMunicipality}
-                />
-              </div>
-
-              <div className="auth-input-group">
                 <SearchableDropdown
                   name="municipality_id"
                   options={municipalities}
@@ -846,6 +818,33 @@ function SignUp({ onBack }) {
                   />
                 </div>
               )}
+
+              <div className="auth-input-group">
+                <SearchableDropdown
+                  name="barangay_id"
+                  options={barangays}
+                  value={formData.barangay_id}
+                  onChange={handleInputChange}
+                  placeholder={
+                    !formData.municipality_id
+                      ? "Select Municipality First"
+                      : "Barangay"
+                  }
+                  disabled={!formData.municipality_id || isOtherMunicipality}
+                />
+              </div>
+
+              <div className="auth-input-group">
+                <input
+                  type="text"
+                  name="purokSitio"
+                  placeholder="Purok"
+                  value={formData.purokSitio}
+                  onChange={handleInputChange}
+                  className="auth-input"
+                  style={{ padding: "14px 20px" }}
+                />
+              </div>
 
               <div className="auth-input-group">
                 <input

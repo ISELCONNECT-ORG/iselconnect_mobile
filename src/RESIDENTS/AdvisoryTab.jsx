@@ -2,23 +2,49 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { translations } from "../components/translations";
 import LoadingScreen from "../components/LoadingScreen";
-import { Zap, ChevronDown, ChevronUp } from "lucide-react";
+import { Zap, ChevronDown, ChevronUp, MapPin, Globe } from "lucide-react";
 import "../Resident.css";
 
 function AdvisoryTab() {
   const [advisories, setAdvisories] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Tracks which individual municipalities are expanded
-  const [expandedAdvisories, setExpandedAdvisories] = useState({});
+  const [filterMode, setFilterMode] = useState("my_location");
+  const [userLoc, setUserLoc] = useState(null);
 
-  // 🌟 NEW: Tracks which canceled groups (Date/Time blocks) are expanded
+  const [expandedAdvisories, setExpandedAdvisories] = useState({});
   const [expandedGroups, setExpandedGroups] = useState({});
 
   const currentLang = localStorage.getItem("appLanguage") || "English";
   const t = translations[currentLang];
 
   useEffect(() => {
+    const fetchUserLocation = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from("users")
+          .select(
+            `
+            municipalities(name),
+            barangays(name)
+          `,
+          )
+          .eq("id", user.id)
+          .single();
+
+        if (data) {
+          setUserLoc({
+            municipality: data.municipalities?.name || "",
+            barangay: data.barangays?.name || "",
+          });
+        }
+      }
+    };
+
+    fetchUserLocation();
     fetchAdvisories();
 
     const channel = supabase
@@ -78,7 +104,6 @@ function AdvisoryTab() {
     }));
   };
 
-  // 🌟 NEW: Toggle function for the entire canceled schedule block
   const toggleGroupExpand = (groupKey) => {
     setExpandedGroups((prev) => ({
       ...prev,
@@ -86,7 +111,37 @@ function AdvisoryTab() {
     }));
   };
 
-  const groupedAdvisories = advisories.reduce((acc, current) => {
+  const filteredAdvisories = advisories.reduce((acc, current) => {
+    if (filterMode === "all") {
+      acc.push(current);
+    } else if (filterMode === "my_location" && userLoc) {
+      const isMyMun = current.municipalities?.name === userLoc.municipality;
+
+      if (isMyMun) {
+        const affectedArr = current.affected_areas
+          ? current.affected_areas.split(",").map((b) => b.trim().toLowerCase())
+          : [];
+        const myBrgyLower = userLoc.barangay.toLowerCase();
+
+        // Check if user's barangay is explicitly listed, or if "All Barangays" is stated
+        const isAll = affectedArr.some(
+          (b) => b.includes("all") || b.includes("whole"),
+        );
+        const exactMatch = affectedArr.find((b) => b === myBrgyLower);
+
+        if (isAll || exactMatch) {
+          // Force the affected areas to strictly only show the user's specific barangay
+          acc.push({
+            ...current,
+            affected_areas: userLoc.barangay,
+          });
+        }
+      }
+    }
+    return acc;
+  }, []);
+
+  const groupedAdvisories = filteredAdvisories.reduce((acc, current) => {
     const dateStr = new Date(current.schedule_start)
       .toLocaleDateString("en-US", {
         month: "long",
@@ -128,24 +183,78 @@ function AdvisoryTab() {
           WebkitBackdropFilter: "blur(16px)",
           zIndex: 50,
           borderBottom: "1px solid rgba(0,0,0,0.06)",
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
         }}
       >
-        <Zap size={26} color="#facc15" fill="#facc15" />
-        <h2
+        <div
           style={{
-            margin: 0,
-            fontSize: "1.3rem",
-            fontWeight: "900",
-            letterSpacing: "1px",
-            textTransform: "uppercase",
-            color: "#1b0b8c",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            marginBottom: "15px",
           }}
         >
-          {t.powerYellow} {t.advisoryNavy}
-        </h2>
+          <Zap size={26} color="#facc15" fill="#facc15" />
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "1.3rem",
+              fontWeight: "900",
+              letterSpacing: "1px",
+              textTransform: "uppercase",
+              color: "#1b0b8c",
+            }}
+          >
+            {t.powerYellow} {t.advisoryNavy}
+          </h2>
+        </div>
+
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            onClick={() => setFilterMode("my_location")}
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              padding: "12px",
+              borderRadius: "30px",
+              border: "none",
+              fontWeight: "900",
+              fontSize: "0.85rem",
+              backgroundColor:
+                filterMode === "my_location" ? "#16a34a" : "#e2e8f0",
+              color: filterMode === "my_location" ? "#ffffff" : "#64748b",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+            }}
+          >
+            <MapPin size={18} />
+            My Area
+          </button>
+          <button
+            onClick={() => setFilterMode("all")}
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              padding: "12px",
+              borderRadius: "30px",
+              border: "none",
+              fontWeight: "900",
+              fontSize: "0.85rem",
+              backgroundColor: filterMode === "all" ? "#1b0b8c" : "#e2e8f0",
+              color: filterMode === "all" ? "#ffffff" : "#64748b",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+            }}
+          >
+            <Globe size={18} />
+            All Areas
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -153,7 +262,9 @@ function AdvisoryTab() {
       ) : Object.keys(groupedAdvisories).length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 20px" }}>
           <p style={{ color: "#64748b", fontSize: "1rem", fontWeight: "600" }}>
-            {t.noAdvisories}
+            {filterMode === "my_location"
+              ? "No power interruptions scheduled for your specific area."
+              : t.noAdvisories}
           </p>
         </div>
       ) : (
@@ -162,7 +273,6 @@ function AdvisoryTab() {
             groupKey.split("|");
           const isCanceled = statusKey.toUpperCase() === "CANCELLED";
 
-          // Check if this specific canceled group is expanded
           const isGroupExpanded = expandedGroups[groupKey];
 
           return (
@@ -182,7 +292,6 @@ function AdvisoryTab() {
                 transition: "all 0.3s ease",
               }}
             >
-              {/* CANCELED BADGE */}
               {isCanceled && (
                 <div
                   style={{
@@ -205,7 +314,6 @@ function AdvisoryTab() {
                 </div>
               )}
 
-              {/* 🌟 NEW: CLICKABLE SCHEDULE HEADER */}
               <div
                 onClick={() => isCanceled && toggleGroupExpand(groupKey)}
                 style={{
@@ -248,7 +356,6 @@ function AdvisoryTab() {
                   {timeKey}
                 </p>
 
-                {/* 🌟 NEW: DROPDOWN CHEVRON FOR CANCELED ITEMS */}
                 {isCanceled && (
                   <div
                     style={{
@@ -267,10 +374,8 @@ function AdvisoryTab() {
                 )}
               </div>
 
-              {/* 🌟 NEW: EVERYTHING BELOW IS HIDDEN UNLESS ACTIVE OR EXPANDED */}
               {(!isCanceled || isGroupExpanded) && (
                 <div style={{ animation: "contentFade 0.3s ease-in-out" }}>
-                  {/* ADVISORY TITLE & CONTEXT BOX */}
                   {(titleKey || contentKey) && (
                     <div
                       style={{
@@ -321,7 +426,6 @@ function AdvisoryTab() {
                     </div>
                   )}
 
-                  {/* LIST OF AFFECTED MUNICIPALITIES & BARANGAYS */}
                   <div
                     style={{
                       display: "flex",
@@ -352,7 +456,6 @@ function AdvisoryTab() {
                             transition: "all 0.2s ease",
                           }}
                         >
-                          {/* MUNICIPALITY TOGGLE HEADER */}
                           <div
                             onClick={() => toggleExpand(adv.id)}
                             style={{
@@ -398,7 +501,6 @@ function AdvisoryTab() {
                             )}
                           </div>
 
-                          {/* DROPDOWN BARANGAYS LIST */}
                           {isExpanded && (
                             <div
                               style={{

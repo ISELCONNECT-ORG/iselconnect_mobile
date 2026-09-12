@@ -44,6 +44,9 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const [timelineData, setTimelineData] = useState(null);
   const [assignedLinemen, setAssignedLinemen] = useState([]);
 
+  // 🌟 NEW: State to hold the fetched team name
+  const [assignedTeamName, setAssignedTeamName] = useState("Unassigned");
+
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -87,15 +90,17 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
 
   useEffect(() => {
     const fetchAssignmentDetails = async () => {
+      // 🌟 UPDATED: Added lineman_id and users(id) to fetch the team
       const { data, error } = await supabase
         .from("assignments")
         .select(
           `
+          lineman_id,
           assigned_at, 
           inprogress_at, 
           completion_at, 
           verified_at,
-          users ( first_name, last_name )
+          users ( id, first_name, last_name )
         `,
         )
         .eq("report_id", report.id);
@@ -110,6 +115,34 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           .filter(Boolean);
 
         setAssignedLinemen([...new Set(linemenNames)]);
+
+        // 🌟 NEW: Fetch the team name based on the assigned lineman
+        const sampleUserId = data[0].lineman_id || data[0].users?.id;
+        let foundTeamName = "Assigned Team";
+
+        if (sampleUserId) {
+          const { data: teamsData } = await supabase
+            .from("lineman_teams")
+            .select("*");
+          if (teamsData) {
+            const myTeam = teamsData.find((team) => {
+              if (team.team_leader === sampleUserId) return true;
+              if (Array.isArray(team.team_members)) {
+                return team.team_members.some(
+                  (member) =>
+                    member === sampleUserId ||
+                    member?.value === sampleUserId ||
+                    member?.id === sampleUserId,
+                );
+              } else if (typeof team.team_members === "string") {
+                return team.team_members.includes(sampleUserId);
+              }
+              return false;
+            });
+            if (myTeam) foundTeamName = myTeam.team_name || "Assigned Team";
+          }
+        }
+        setAssignedTeamName(foundTeamName);
       }
     };
     fetchAssignmentDetails();
@@ -917,7 +950,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           </div>
         )}
 
-        {/* 🌟 NEW: Report Progress Timeline moved here! */}
         {statusName !== "REJECTED" && (
           <div
             style={{
@@ -1091,6 +1123,33 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           </div>
         )}
 
+        {report.resolved_photo_url && (
+          <button
+            onClick={() => setShowEvidence(true)}
+            style={{
+              width: "100%",
+              padding: "16px",
+              backgroundColor: "#16a34a",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "50px",
+              fontWeight: "900",
+              fontSize: "1rem",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "10px",
+              cursor: "pointer",
+              boxShadow: "0 6px 15px rgba(22, 163, 74, 0.2)",
+              transition: "transform 0.1s",
+              marginBottom: "20px",
+            }}
+          >
+            <ImageIcon size={22} />
+            {t.fixedEvidence || "View Proof of Resolution"}
+          </button>
+        )}
+
         {/* Combined Location Map & Coordinates Card */}
         <div
           style={{
@@ -1148,33 +1207,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
             </span>
           </div>
         </div>
-
-        {report.resolved_photo_url && (
-          <button
-            onClick={() => setShowEvidence(true)}
-            style={{
-              width: "100%",
-              padding: "16px",
-              backgroundColor: "#16a34a",
-              color: "#ffffff",
-              border: "none",
-              borderRadius: "50px",
-              fontWeight: "900",
-              fontSize: "1rem",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: "10px",
-              cursor: "pointer",
-              boxShadow: "0 6px 15px rgba(22, 163, 74, 0.2)",
-              transition: "transform 0.1s",
-              marginBottom: "20px",
-            }}
-          >
-            <ImageIcon size={22} />
-            {t.fixedEvidence || "View Proof of Resolution"}
-          </button>
-        )}
 
         <div
           className="detail-info-section rrd-info-section"
@@ -1288,12 +1320,35 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 <>
                   <hr className="rrd-hr" />
                   <div>
-                    <p className="rrd-field-label">Assigned Personnel</p>
+                    {/* 🌟 NEW: Assigned Team and Members Section */}
+                    <p
+                      className="rrd-field-label"
+                      style={{ marginBottom: "4px" }}
+                    >
+                      Assigned Team
+                    </p>
+                    <p
+                      className="rrd-field-value-normal"
+                      style={{
+                        fontWeight: "900",
+                        color: "#15803d",
+                        marginBottom: "12px",
+                        fontSize: "1.05rem",
+                      }}
+                    >
+                      {assignedTeamName}
+                    </p>
+
+                    <p className="rrd-field-label">Team Members</p>
                     {assignedLinemen.map((name, idx) => (
                       <p
                         key={idx}
                         className="rrd-field-value-normal"
-                        style={{ marginBottom: "2px", fontWeight: "700" }}
+                        style={{
+                          marginBottom: "2px",
+                          fontWeight: "700",
+                          color: "#334155",
+                        }}
                       >
                         • {name}
                       </p>

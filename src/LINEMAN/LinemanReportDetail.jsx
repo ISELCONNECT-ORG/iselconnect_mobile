@@ -11,6 +11,7 @@ import {
   Users,
   MessageSquare,
   AlertCircle,
+  PlayCircle,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -59,6 +60,9 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [linemanLocation, setLinemanLocation] = useState(null);
+
+  // 🌟 NEW: State to hold the fetched team name
+  const [assignedTeamName, setAssignedTeamName] = useState("Loading...");
 
   const isResolved =
     activeStatus === "RESOLVED" || activeStatus === "ADMIN VERIFIED";
@@ -134,22 +138,55 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           .from("assignments")
           .select(`lineman_id, admin_remarks, users ( first_name, last_name )`)
           .eq("report_id", report.id);
+
         if (error) throw error;
-        if (data) {
-          const otherLinemen = data
-            .filter((a) => a.lineman_id !== user?.id)
+
+        if (data && data.length > 0) {
+          // 🌟 UPDATED: Gather all assigned personnel to display the full team list
+          const allLinemen = data
             .map((a) =>
               `${a.users?.first_name || ""} ${a.users?.last_name || ""}`.trim(),
             )
             .filter(Boolean);
-          setCompanions(otherLinemen);
+          setCompanions([...new Set(allLinemen)]);
+
           const myAssignment =
             data.find((a) => a.lineman_id === user?.id) || data[0];
-          if (myAssignment && myAssignment.admin_remarks)
+          if (myAssignment && myAssignment.admin_remarks) {
             setAdminRemarks(myAssignment.admin_remarks);
+          }
+
+          // 🌟 NEW: Fetch the team name based on the assigned lineman
+          const sampleUserId = data[0].lineman_id;
+          let foundTeamName = "Assigned Team";
+
+          if (sampleUserId) {
+            const { data: teamsData } = await supabase
+              .from("lineman_teams")
+              .select("*");
+            if (teamsData) {
+              const myTeam = teamsData.find((team) => {
+                if (team.team_leader === sampleUserId) return true;
+                if (Array.isArray(team.team_members)) {
+                  return team.team_members.some(
+                    (member) =>
+                      member === sampleUserId ||
+                      member?.value === sampleUserId ||
+                      member?.id === sampleUserId,
+                  );
+                } else if (typeof team.team_members === "string") {
+                  return team.team_members.includes(sampleUserId);
+                }
+                return false;
+              });
+              if (myTeam) foundTeamName = myTeam.team_name || "Assigned Team";
+            }
+          }
+          setAssignedTeamName(foundTeamName);
         }
       } catch (err) {
         console.error(err.message);
+        setAssignedTeamName("Assigned Team");
       } finally {
         setLoadingAssignmentDetails(false);
       }
@@ -365,6 +402,46 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
       if (navBar) navBar.style.display = "";
     };
   }, []);
+
+  const handleStartClick = async () => {
+    setIsSubmitting(true);
+    try {
+      const { data: statusData, error: statusError } = await supabase
+        .from("report_statuses")
+        .select("id")
+        .ilike("name", "IN PROGRESS")
+        .single();
+
+      if (statusError || !statusData) {
+        throw new Error("Could not find IN PROGRESS status in database.");
+      }
+
+      const { error: reportError } = await supabase
+        .from("reports")
+        .update({ status_id: statusData.id })
+        .eq("id", report.id);
+
+      if (reportError) throw reportError;
+
+      const { error: assignError } = await supabase
+        .from("assignments")
+        .update({ inprogress_at: new Date().toISOString() })
+        .eq("report_id", report.id);
+
+      if (assignError) throw assignError;
+
+      await logSystemAction(
+        "START_REPORT",
+        `Lineman started work on report #${report.id}.`,
+      );
+
+      setActiveStatus("IN PROGRESS");
+    } catch (err) {
+      alert("Failed to start report: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleVerifyClick = () => {
     if (isLocked) return;
@@ -1093,7 +1170,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                marginBottom: "10px",
+                marginBottom: "4px",
               }}
             >
               <Users size={20} color="#1b0b8c" />
@@ -1106,9 +1183,10 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                   letterSpacing: "0.5px",
                 }}
               >
-                {t.assignedCompanions}
+                ASSIGNED TEAM
               </h3>
             </div>
+
             {loadingAssignmentDetails ? (
               <p
                 style={{
@@ -1118,42 +1196,68 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                   fontStyle: "italic",
                 }}
               >
-                {t.loadingTeam}
+                Loading team details...
               </p>
-            ) : companions.length > 0 ? (
-              <ul
-                style={{
-                  margin: 0,
-                  paddingLeft: "20px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
-                }}
-              >
-                {companions.map((comp, idx) => (
-                  <li
-                    key={idx}
+            ) : (
+              <>
+                {/* 🌟 NEW: Highlighted Assigned Team Name */}
+                <p
+                  style={{
+                    margin: "0 0 12px 0",
+                    fontSize: "1.1rem",
+                    color: "#15803d",
+                    fontWeight: "900",
+                  }}
+                >
+                  {assignedTeamName}
+                </p>
+                <p
+                  style={{
+                    margin: "0 0 6px 0",
+                    fontSize: "0.75rem",
+                    color: "#64748b",
+                    fontWeight: "800",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Team Members
+                </p>
+                {companions.length > 0 ? (
+                  <ul
                     style={{
-                      fontSize: "0.9rem",
-                      color: "#334155",
-                      fontWeight: "700",
+                      margin: 0,
+                      paddingLeft: "20px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
                     }}
                   >
-                    {comp}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "0.85rem",
-                  color: "#64748b",
-                  fontWeight: "600",
-                }}
-              >
-                {t.onlyLineman}
-              </p>
+                    {companions.map((comp, idx) => (
+                      <li
+                        key={idx}
+                        style={{
+                          fontSize: "0.9rem",
+                          color: "#334155",
+                          fontWeight: "700",
+                        }}
+                      >
+                        {comp}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.85rem",
+                      color: "#64748b",
+                      fontWeight: "600",
+                    }}
+                  >
+                    No members found.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1167,23 +1271,58 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           display: "flex",
         }}
       >
-        <button
-          className={`status-icon-btn btn-resolved ${
-            isLocked ? "active active-resolved" : ""
-          }`}
-          onClick={handleVerifyClick}
-          disabled={isLocked}
-          style={{
-            flex: 1,
-            display: "flex",
-            justifyContent: "center",
-            gap: "8px",
-            ...(isLocked ? { opacity: 0.5, cursor: "not-allowed" } : {}),
-          }}
-        >
-          <CheckCircle size={28} className="status-icon" />
-          <span style={{ fontSize: "1.05rem" }}>Submit for Verification</span>
-        </button>
+        {activeStatus === "ON QUEUE" ? (
+          <button
+            onClick={handleStartClick}
+            disabled={isSubmitting}
+            style={{
+              flex: 1,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "8px",
+              backgroundColor: "#16a34a",
+              color: "#fff",
+              padding: "16px",
+              borderRadius: "50px",
+              border: "none",
+              fontWeight: "900",
+              fontSize: "1.05rem",
+              textTransform: "uppercase",
+              boxShadow: "0 4px 15px rgba(22, 163, 74, 0.3)",
+              cursor: isSubmitting ? "not-allowed" : "pointer",
+              opacity: isSubmitting ? 0.7 : 1,
+              transition: "transform 0.1s ease",
+            }}
+            onMouseDown={(e) =>
+              (e.currentTarget.style.transform = "scale(0.98)")
+            }
+            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          >
+            <PlayCircle size={28} />
+            <span>{isSubmitting ? "Starting..." : "Start Work"}</span>
+          </button>
+        ) : (
+          <button
+            className={`status-icon-btn btn-resolved ${
+              isLocked ? "active active-resolved" : ""
+            }`}
+            onClick={handleVerifyClick}
+            disabled={isLocked || activeStatus !== "IN PROGRESS"}
+            style={{
+              flex: 1,
+              display: "flex",
+              justifyContent: "center",
+              gap: "8px",
+              ...(isLocked || activeStatus !== "IN PROGRESS"
+                ? { opacity: 0.5, cursor: "not-allowed" }
+                : {}),
+            }}
+          >
+            <CheckCircle size={28} className="status-icon" />
+            <span style={{ fontSize: "1.05rem" }}>Submit for Verification</span>
+          </button>
+        )}
       </div>
     </div>
   );

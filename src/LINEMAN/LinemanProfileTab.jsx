@@ -1,397 +1,588 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
-import { Settings, User, Edit, Save, X } from "lucide-react";
-import LinemanSettingsTab from "./LinemanSettingsTab";
-import logo from "../assets/BG.png";
-import { logSystemAction } from "../utils/logger";
+import LinemanReportDetail from "./LinemanReportDetail";
 import { translations } from "../components/translations";
-import "../Lineman.css";
-import LoadingScreen from "../components/LoadingScreen";
+import { Power, ClipboardList } from "lucide-react";
 
-function LinemanProfileTab({ onLogout }) {
+const priorityWeight = {
+  Critical: 4,
+  High: 3,
+  Normal: 2,
+  Low: 1,
+};
+
+const getPriorityColor = (level) => {
+  switch (level?.toUpperCase()) {
+    case "CRITICAL":
+      return "#ef4444";
+    case "HIGH":
+      return "#f97316";
+    case "NORMAL":
+      return "#3b82f6";
+    case "LOW":
+      return "#10b981";
+    default:
+      return "#1b0b8c";
+  }
+};
+
+function LinemanReportTab({
+  dutyStatus,
+  onDutyToggle,
+  hasEmployeeRow,
+  dutyStartTime,
+  dutyEndTime,
+}) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
   const t = translations[currentLang];
 
-  const [userProfile, setUserProfile] = useState(null);
+  const [linemanName, setLinemanName] = useState("");
+  const [assignedReports, setAssignedReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState("profile");
+  const [selectedReport, setSelectedReport] = useState(null);
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [municipalities, setMunicipalities] = useState([]);
-  const [barangays, setBarangays] = useState([]);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [filterStatus, setFilterStatus] = useState("ALL");
 
-  const [editData, setEditData] = useState({
-    first_name: "",
-    middle_name: "",
-    last_name: "",
-    municipality_id: "",
-    barangay_id: "",
-    purok_sitio: "",
-  });
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
-  const fetchUserData = async () => {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
+      if (userError || !user) throw userError;
 
-      if (user) {
-        const { data: dbUser } = await supabase
-          .from("users")
-          .select(
-            `*, employees ( employee_id_no ), barangays ( id, name ), municipalities ( id, name )`,
-          )
-          .eq("id", user.id)
-          .maybeSingle();
-        const empId =
-          dbUser?.employees?.[0]?.employee_id_no ||
-          dbUser?.employees?.employee_id_no ||
-          "N/A";
-        const hasAddress =
-          dbUser?.municipalities?.name || dbUser?.barangays?.name;
-        const addressParts = [
-          dbUser?.purok_sitio,
-          dbUser?.barangays?.name,
-          dbUser?.municipalities?.name,
-          hasAddress ? "Isabela" : null,
-        ].filter(Boolean);
-        const fullAddress = hasAddress ? addressParts.join(", ") : "None";
+      const { data: userData } = await supabase
+        .from("users")
+        .select("first_name")
+        .eq("id", user.id)
+        .maybeSingle();
 
-        setUserProfile({
-          id: user.id,
-          email: user.email || dbUser?.email || "N/A",
-          firstName: dbUser?.first_name ?? "",
-          lastName: dbUser?.last_name ?? "",
-          middleName: dbUser?.middle_name ?? "",
-          mobileNumber: dbUser?.mobile_number ?? "N/A",
-          employeeId: empId,
-          address: fullAddress,
-          municipality_id: dbUser?.municipality_id || "",
-          barangay_id: dbUser?.barangay_id || "",
-          purok_sitio: dbUser?.purok_sitio || "",
+      if (userData) setLinemanName(userData.first_name);
+
+      const { data: assignmentsData, error: assignError } = await supabase
+        .from("assignments")
+        .select(
+          `reports ( id, description, landmark, latitude, longitude, photo_url, purok_sitio, created_at, barangays ( name ), municipalities ( name ), report_types ( name, priority_level ), report_statuses ( id, name ) )`,
+        )
+        .eq("lineman_id", user.id);
+
+      if (assignmentsData && !assignError) {
+        const extractedReports = assignmentsData
+          .map((a) => a.reports)
+          .filter(Boolean);
+
+        const sortedAssignedReports = extractedReports.sort((a, b) => {
+          const weightA = priorityWeight[a.report_types?.priority_level] || 0;
+          const weightB = priorityWeight[b.report_types?.priority_level] || 0;
+          if (weightB !== weightA) return weightB - weightA;
+          return new Date(b.created_at) - new Date(a.created_at);
         });
+        setAssignedReports(sortedAssignedReports);
       }
     } catch (error) {
-      console.error("Error loading lineman profile:", error);
+      console.error("Error fetching lineman queue data:", error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchUserData();
-  }, []);
-
-  useEffect(() => {
-    const fetchMunicipalities = async () => {
-      const { data } = await supabase
-        .from("municipalities")
-        .select("id, name")
-        .order("name");
-      if (data) setMunicipalities(data);
-    };
-    fetchMunicipalities();
-  }, []);
-
-  useEffect(() => {
-    const fetchBarangays = async () => {
-      if (!editData.municipality_id) {
-        setBarangays([]);
-        return;
-      }
-      const { data } = await supabase
-        .from("barangays")
-        .select("id, name")
-        .eq("municipality_id", editData.municipality_id)
-        .order("name");
-      if (data) setBarangays(data);
-    };
-    if (isEditing) fetchBarangays();
-  }, [editData.municipality_id, isEditing]);
-
-  const handleEditClick = () => {
-    setEditData({
-      first_name: userProfile.firstName,
-      middle_name: userProfile.middleName,
-      last_name: userProfile.lastName,
-      municipality_id: userProfile.municipality_id,
-      barangay_id: userProfile.barangay_id,
-      purok_sitio: userProfile.purok_sitio,
-    });
-    setIsEditing(true);
+  const formatAddress = (report) => {
+    return [
+      report.purok_sitio,
+      report.barangays?.name,
+      report.municipalities?.name,
+      "Isabela",
+    ]
+      .filter(Boolean)
+      .join(", ");
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setEditData((prev) => {
-      const newData = { ...prev, [name]: value };
-      if (name === "municipality_id") newData.barangay_id = "";
-      return newData;
+  const formatTime = (isoString) => {
+    if (!isoString) return "";
+    const d = new Date(isoString);
+    return d.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
     });
   };
 
-  const handleSaveProfile = async () => {
-    if (
-      !editData.first_name ||
-      !editData.last_name ||
-      !editData.municipality_id ||
-      !editData.barangay_id
-    ) {
-      alert("First Name, Last Name, Municipality, and Barangay are required.");
-      return;
-    }
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from("users")
-        .update({
-          first_name: editData.first_name.trim(),
-          middle_name: editData.middle_name.trim() || null,
-          last_name: editData.last_name.trim(),
-          municipality_id: parseInt(editData.municipality_id),
-          barangay_id: parseInt(editData.barangay_id),
-          purok_sitio: editData.purok_sitio.trim() || null,
-        })
-        .eq("id", userProfile.id);
-      if (error) throw error;
-      await logSystemAction(
-        "UPDATE_PROFILE",
-        "Lineman updated their profile information.",
-      );
-      setIsEditing(false);
-      setShowSuccessModal(true);
-      await fetchUserData();
-    } catch (err) {
-      alert("Error updating profile. Please try again.");
-    } finally {
-      setSaving(false);
+  const activeAssignedReports = assignedReports.filter(
+    (r) => r.report_statuses?.name?.toUpperCase() !== "RESOLVED",
+  );
+
+  const onQueueCount = activeAssignedReports.filter(
+    (r) => r.report_statuses?.name?.toUpperCase() === "ON QUEUE",
+  ).length;
+
+  const inProgressCount = activeAssignedReports.filter(
+    (r) => r.report_statuses?.name?.toUpperCase() === "IN PROGRESS",
+  ).length;
+
+  const filteredActiveReports = activeAssignedReports.filter((r) => {
+    if (filterStatus === "ALL") return true;
+    return r.report_statuses?.name?.toUpperCase() === filterStatus;
+  });
+
+  const handleFilterClick = (status) => {
+    if (filterStatus === status) {
+      setFilterStatus("ALL");
+    } else {
+      setFilterStatus(status);
     }
   };
 
-  if (loading) return <LoadingScreen message={t.loadingProfile} />;
-
-  if (activeView === "settings") {
+  if (selectedReport) {
     return (
-      <LinemanSettingsTab
-        onBack={() => setActiveView("profile")}
-        onLogout={onLogout}
+      <LinemanReportDetail
+        report={selectedReport}
+        onBack={() => setSelectedReport(null)}
+        onReportUpdated={() => {
+          setSelectedReport(null);
+          fetchDashboardData();
+        }}
       />
     );
   }
 
-  const fullName =
-    `${userProfile?.firstName ?? ""} ${userProfile?.middleName ?? ""} ${userProfile?.lastName ?? ""}`
-      .replace(/\s+/g, " ")
-      .trim() || "Lineman";
-
   return (
     <div
-      className="pt-container page-transition"
       style={{
-        height: "100vh",
-        overflowY: "auto",
-        paddingBottom: "150px",
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
         boxSizing: "border-box",
-        position: "relative",
+        padding: "18px 16px",
+        background: "linear-gradient(180deg, #ffffff 0%, #f4f6ff 100%)",
+        minHeight: "100%",
       }}
     >
-      {showSuccessModal && (
-        <div className="modal-overlay">
-          <div className="modal-box">
-            <h3 className="modal-title">{t.confirmChangesTitle}</h3>
-            <p
-              className="modal-text"
-              dangerouslySetInnerHTML={{
-                __html: t.confirmChangesText.replace(
-                  "successfully",
-                  "successfully<br/>",
-                ),
-              }}
-            />
-            <div className="modal-buttons">
-              <button
-                className="modal-btn confirm-btn"
-                onClick={() => setShowSuccessModal(false)}
-                style={{ backgroundColor: "#1b0b8c", width: "100%" }}
-              >
-                OK!
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div
-        className="profile-header-bg"
         style={{
-          background: `linear-gradient(rgba(255,255,255,0.2), rgba(255,255,255,0.6)), url(${logo})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
+          position: "sticky",
+          top: 0,
+          margin: "-18px -16px 20px -16px",
+          padding: "18px 16px 15px 16px",
+          background: "rgba(248, 250, 252, 0.92)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          zIndex: 50,
+          borderBottom: "1px solid rgba(0,0,0,0.05)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
         }}
       >
-        <div className="avatar-container">
-          <User size={80} color="#1b0b8c" strokeWidth={1.5} />
+        <div>
+          <p className="l-rt-greeting" style={{ margin: 0 }}>
+            {t.hello}
+          </p>
+          <h2 className="l-rt-name" style={{ margin: 0, lineHeight: 1.1 }}>
+            {linemanName || "Lineman"}
+          </h2>
+
+          <div
+            style={{
+              marginTop: "4px",
+              fontSize: "0.75rem",
+              color: "#64748b",
+              fontWeight: "700",
+            }}
+          >
+            {dutyStatus === "On Duty" && dutyStartTime && (
+              <span>
+                Started:{" "}
+                <span style={{ color: "#16a34a" }}>
+                  {formatTime(dutyStartTime)}
+                </span>
+              </span>
+            )}
+            {dutyStatus === "Off Duty" && dutyEndTime && (
+              <span>
+                Ended:{" "}
+                <span style={{ color: "#ef4444" }}>
+                  {formatTime(dutyEndTime)}
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {dutyStatus && (
+          <button
+            onClick={onDutyToggle}
+            disabled={dutyStatus === "Loading..." || !hasEmployeeRow}
+            style={{
+              backgroundColor:
+                dutyStatus === "On Duty"
+                  ? "#16a34a"
+                  : dutyStatus === "Loading..."
+                    ? "#94a3b8"
+                    : "#ef4444",
+              color: "white",
+              border: "none",
+              padding: "8px 16px",
+              borderRadius: "50px",
+              fontWeight: "900",
+              fontSize: "0.75rem",
+              cursor:
+                dutyStatus === "Loading..." || !hasEmployeeRow
+                  ? "not-allowed"
+                  : "pointer",
+              boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
+              textTransform: "uppercase",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              transition: "transform 0.1s ease, background-color 0.3s ease",
+              opacity: dutyStatus === "Loading..." || !hasEmployeeRow ? 0.7 : 1,
+            }}
+          >
+            <Power size={14} strokeWidth={3} />
+            {!hasEmployeeRow
+              ? "NO PROFILE"
+              : dutyStatus === "On Duty"
+                ? "ON DUTY"
+                : dutyStatus === "Loading..."
+                  ? "LOADING"
+                  : "OFF DUTY"}
+          </button>
+        )}
+      </div>
+
+      {/* 🌟 3-Column UI Counter Dashboard (Total Assigned, On Queue, In Progress) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: "10px",
+          width: "100%",
+          boxSizing: "border-box",
+          marginBottom: "25px",
+        }}
+      >
+        <div
+          onClick={() => setFilterStatus("ALL")}
+          style={{
+            backgroundColor: "#f1f5f9",
+            border: "1px solid #e2e8f0",
+            borderRadius: "16px",
+            padding: "12px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            opacity: filterStatus === "ALL" ? 1 : 0.45,
+            transform: filterStatus === "ALL" ? "scale(1.03)" : "scale(1)",
+            transition: "all 0.2s ease",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.65rem",
+              fontWeight: "800",
+              color: "#475569",
+              textTransform: "uppercase",
+            }}
+          >
+            Total
+            <br />
+            Assigned
+          </p>
+          <h3
+            style={{
+              margin: "8px 0 0 0",
+              fontSize: "1.3rem",
+              fontWeight: "900",
+              color: "#1e293b",
+            }}
+          >
+            {activeAssignedReports.length}
+          </h3>
+        </div>
+
+        <div
+          onClick={() => handleFilterClick("ON QUEUE")}
+          style={{
+            backgroundColor: "#fffbeb",
+            border: "1px solid #fde047",
+            borderRadius: "16px",
+            padding: "12px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            opacity:
+              filterStatus === "ALL" || filterStatus === "ON QUEUE" ? 1 : 0.45,
+            transform: filterStatus === "ON QUEUE" ? "scale(1.03)" : "scale(1)",
+            transition: "all 0.2s ease",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.65rem",
+              fontWeight: "900",
+              color: "#b45309",
+              textTransform: "uppercase",
+            }}
+          >
+            On
+            <br />
+            Queue
+          </p>
+          <h3
+            style={{
+              margin: "8px 0 0 0",
+              fontSize: "1.3rem",
+              fontWeight: "900",
+              color: "#b45309",
+            }}
+          >
+            {onQueueCount}
+          </h3>
+        </div>
+
+        <div
+          onClick={() => handleFilterClick("IN PROGRESS")}
+          style={{
+            backgroundColor: "#f0fdf4",
+            border: "1px solid #86efac",
+            borderRadius: "16px",
+            padding: "12px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            opacity:
+              filterStatus === "ALL" || filterStatus === "IN PROGRESS"
+                ? 1
+                : 0.45,
+            transform:
+              filterStatus === "IN PROGRESS" ? "scale(1.03)" : "scale(1)",
+            transition: "all 0.2s ease",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.65rem",
+              fontWeight: "900",
+              color: "#15803d",
+              textTransform: "uppercase",
+            }}
+          >
+            In
+            <br />
+            Progress
+          </p>
+          <h3
+            style={{
+              margin: "8px 0 0 0",
+              fontSize: "1.3rem",
+              fontWeight: "900",
+              color: "#15803d",
+            }}
+          >
+            {inProgressCount}
+          </h3>
         </div>
       </div>
 
-      <div className="pt-info-wrapper">
-        <h2 className="pt-name-heading">
-          {isEditing ? t.editProfileTitle : fullName}
-        </h2>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "15px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <ClipboardList size={20} color="#1b0b8c" />
+          <h2 className="l-rt-section-title" style={{ margin: 0 }}>
+            <span className="text-yellow">TEAM</span>{" "}
+            <span className="text-navy">QUEUE</span>
+          </h2>
+        </div>
 
-        {!isEditing ? (
-          <>
-            <div className="pt-data-grid page-transition">
-              <div className="pt-data-row">
-                <span className="pt-data-label">{t.employeeId}</span>
-                <span className="pt-data-value">{userProfile?.employeeId}</span>
-              </div>
-              <div className="pt-data-row">
-                <span className="pt-data-label">{t.emailLabel}</span>
-                <span
-                  className="pt-data-value"
-                  style={{ wordBreak: "break-all" }}
-                >
-                  {userProfile?.email}
-                </span>
-              </div>
-              <div className="pt-data-row">
-                <span className="pt-data-label">{t.addressLabel}</span>
-                <span
-                  className="pt-data-value"
+        {filterStatus !== "ALL" && (
+          <button
+            onClick={() => setFilterStatus("ALL")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#64748b",
+              fontWeight: "bold",
+              fontSize: "0.85rem",
+              textDecoration: "underline",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            View All
+          </button>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      >
+        {loading ? (
+          <p className="l-rt-loading">{t.loadingAssignments}</p>
+        ) : filteredActiveReports.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <p
+              className="l-rt-loading"
+              style={{
+                color: "#64748b",
+                background: "transparent",
+                margin: "0 0 5px 0",
+              }}
+            >
+              {t.noActiveReports}
+            </p>
+            {filterStatus !== "ALL" && (
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "#94a3b8" }}>
+                Try selecting a different filter.
+              </p>
+            )}
+          </div>
+        ) : (
+          filteredActiveReports.map((report) => {
+            const statusName =
+              report.report_statuses?.name?.toUpperCase() || "UNKNOWN";
+
+            let displayStatusName = statusName;
+            let badgeBg = "#f1f5f9",
+              badgeColor = "#475569",
+              badgeBorder = "#cbd5e1";
+
+            if (statusName === "ON QUEUE") {
+              badgeBg = "#fffbeb";
+              badgeColor = "#ca8a04";
+              badgeBorder = "#fef08a";
+            } else if (statusName === "IN PROGRESS") {
+              displayStatusName = t.inProgress;
+              badgeBg = "#f0f9ff";
+              badgeColor = "#0284c7";
+              badgeBorder = "#bae6fd";
+            }
+
+            return (
+              <div
+                key={`queue-${report.id}`}
+                onClick={() => setSelectedReport(report)}
+                style={{
+                  backgroundColor: "#ffffff",
+                  borderRadius: "16px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "16px",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+                  position: "relative",
+                  overflow: "hidden",
+                  border: "1px solid #f1f5f9",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  transition: "transform 0.1s",
+                }}
+                onMouseDown={(e) =>
+                  (e.currentTarget.style.transform = "scale(0.98)")
+                }
+                onMouseUp={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
+              >
+                <div
                   style={{
-                    textTransform:
-                      userProfile?.address === "None" ? "none" : "inherit",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    flex: 1,
+                    paddingRight: "12px",
                   }}
                 >
-                  {userProfile?.address}
-                </span>
-              </div>
-              <div className="pt-data-row">
-                <span className="pt-data-label">{t.contactLabel}</span>
-                <span className="pt-data-value">
-                  {userProfile?.mobileNumber}
-                </span>
-              </div>
-            </div>
+                  <span
+                    style={{
+                      color: getPriorityColor(
+                        report.report_types?.priority_level,
+                      ),
+                      fontSize: "0.65rem",
+                      fontWeight: "900",
+                      letterSpacing: "0.5px",
+                      textTransform: "uppercase",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    {report.report_types?.priority_level || "Normal"} Priority
+                  </span>
 
-            <div className="profile-btn-row page-transition">
-              <button onClick={handleEditClick} className="profile-btn-edit">
-                <Edit size={20} /> {t.editProfileTitle}
-              </button>
-              <button
-                onClick={() => setActiveView("settings")}
-                className="profile-btn-settings"
-              >
-                <Settings size={20} /> {t.settingsTitle}
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="pt-edit-form-wrapper page-transition">
-            <div className="edit-input-group">
-              <label>{t.firstName}</label>
-              <input
-                type="text"
-                name="first_name"
-                value={editData.first_name}
-                onChange={handleInputChange}
-                className="edit-input"
-              />
-            </div>
-            <div className="edit-input-group">
-              <label>{t.middleName}</label>
-              <input
-                type="text"
-                name="middle_name"
-                value={editData.middle_name}
-                onChange={handleInputChange}
-                className="edit-input"
-              />
-            </div>
-            <div className="edit-input-group">
-              <label>{t.lastName}</label>
-              <input
-                type="text"
-                name="last_name"
-                value={editData.last_name}
-                onChange={handleInputChange}
-                className="edit-input"
-              />
-            </div>
-            <div className="edit-input-group">
-              <label>{t.municipality}</label>
-              <select
-                name="municipality_id"
-                value={editData.municipality_id}
-                onChange={handleInputChange}
-                className="edit-input custom-select"
-              >
-                <option value="" disabled>
-                  {t.selectMunicipality}
-                </option>
-                {municipalities.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="edit-input-group">
-              <label>{t.barangay}</label>
-              <select
-                name="barangay_id"
-                value={editData.barangay_id}
-                onChange={handleInputChange}
-                className="edit-input custom-select"
-                disabled={!editData.municipality_id}
-              >
-                <option value="" disabled>
-                  {editData.municipality_id
-                    ? t.selectBarangay
-                    : t.selectMunicipalityFirst}
-                </option>
-                {barangays.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="edit-input-group">
-              <label>{t.purokSitio}</label>
-              <input
-                type="text"
-                name="purok_sitio"
-                value={editData.purok_sitio}
-                onChange={handleInputChange}
-                className="edit-input"
-              />
-            </div>
-            <div className="edit-actions">
-              <button
-                onClick={() => setIsEditing(false)}
-                className="edit-cancel-btn"
-                disabled={saving}
-              >
-                <X size={18} /> {t.cancelBtn}
-              </button>
-              <button
-                onClick={handleSaveProfile}
-                className="edit-save-btn"
-                disabled={saving}
-              >
-                <Save size={18} /> {saving ? t.savingBtn : t.saveChangesBtn}
-              </button>
-            </div>
-          </div>
+                  <h3
+                    style={{
+                      margin: "0 0 4px 0",
+                      color: "#1b0b8c",
+                      fontSize: "1.05rem",
+                      fontWeight: "900",
+                      letterSpacing: "0.2px",
+                      lineHeight: "1.2",
+                    }}
+                  >
+                    {report.id}. {report.report_types?.name || "UNKNOWN ISSUE"}
+                  </h3>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#64748b",
+                      fontSize: "0.8rem",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    {formatAddress(report)}
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    backgroundColor: badgeBg,
+                    color: badgeColor,
+                    border: `1px solid ${badgeBorder}`,
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    fontSize: "0.7rem",
+                    fontWeight: "900",
+                    letterSpacing: "0.5px",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  {displayStatusName}
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
     </div>
   );
 }
 
-export default LinemanProfileTab;
+export default LinemanReportTab;

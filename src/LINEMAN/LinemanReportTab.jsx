@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import LinemanReportDetail from "./LinemanReportDetail";
 import { translations } from "../components/translations";
-import { Power } from "lucide-react";
+import { Power, ClipboardList } from "lucide-react";
 
 const priorityWeight = {
   Critical: 4,
@@ -26,7 +26,6 @@ const getPriorityColor = (level) => {
   }
 };
 
-// UPDATED: Destructure the new timestamp props
 function LinemanReportTab({
   dutyStatus,
   onDutyToggle,
@@ -42,6 +41,7 @@ function LinemanReportTab({
   const [totalSystemReports, setTotalSystemReports] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
+
   const [filterStatus, setFilterStatus] = useState("ALL");
 
   useEffect(() => {
@@ -76,6 +76,7 @@ function LinemanReportTab({
         const extractedReports = assignmentsData
           .map((a) => a.reports)
           .filter(Boolean);
+
         const sortedAssignedReports = extractedReports.sort((a, b) => {
           const weightA = priorityWeight[a.report_types?.priority_level] || 0;
           const weightB = priorityWeight[b.report_types?.priority_level] || 0;
@@ -90,10 +91,11 @@ function LinemanReportTab({
         .select("*", { count: "exact", head: true });
       if (userData?.branch_id)
         countQuery = countQuery.eq("branch_id", userData.branch_id);
+
       const { count: systemTotalCount } = await countQuery;
       if (systemTotalCount !== null) setTotalSystemReports(systemTotalCount);
     } catch (error) {
-      console.error("Error fetching lineman data:", error.message);
+      console.error("Error fetching lineman queue data:", error.message);
     } finally {
       setLoading(false);
     }
@@ -110,7 +112,6 @@ function LinemanReportTab({
       .join(", ");
   };
 
-  // Helper to format the time beautifully (e.g. "8:30 AM")
   const formatTime = (isoString) => {
     if (!isoString) return "";
     const d = new Date(isoString);
@@ -125,10 +126,26 @@ function LinemanReportTab({
     (r) => r.report_statuses?.name?.toUpperCase() !== "RESOLVED",
   );
 
+  const onQueueCount = assignedReports.filter(
+    (r) => r.report_statuses?.name?.toUpperCase() === "ON QUEUE",
+  ).length;
+
+  const inProgressCount = assignedReports.filter(
+    (r) => r.report_statuses?.name?.toUpperCase() === "IN PROGRESS",
+  ).length;
+
   const filteredActiveReports = activeAssignedReports.filter((r) => {
     if (filterStatus === "ALL") return true;
     return r.report_statuses?.name?.toUpperCase() === filterStatus;
   });
+
+  const handleFilterClick = (status) => {
+    if (filterStatus === status) {
+      setFilterStatus("ALL");
+    } else {
+      setFilterStatus(status);
+    }
+  };
 
   if (selectedReport) {
     return (
@@ -155,14 +172,13 @@ function LinemanReportTab({
         minHeight: "100%",
       }}
     >
-      {/* STICKY HEADER */}
       <div
         style={{
           position: "sticky",
           top: 0,
           margin: "-18px -16px 20px -16px",
           padding: "18px 16px 15px 16px",
-          background: "rgba(255, 255, 255, 0.92)",
+          background: "rgba(248, 250, 252, 0.92)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
           zIndex: 50,
@@ -180,7 +196,6 @@ function LinemanReportTab({
             {linemanName || "Lineman"}
           </h2>
 
-          {/* NEW TIMESTAMP DISPLAY */}
           <div
             style={{
               marginTop: "4px",
@@ -237,10 +252,6 @@ function LinemanReportTab({
               transition: "transform 0.1s ease, background-color 0.3s ease",
               opacity: dutyStatus === "Loading..." || !hasEmployeeRow ? 0.7 : 1,
             }}
-            onMouseDown={(e) =>
-              (e.currentTarget.style.transform = "scale(0.95)")
-            }
-            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
           >
             <Power size={14} strokeWidth={3} />
             {!hasEmployeeRow
@@ -256,100 +267,176 @@ function LinemanReportTab({
 
       <div
         style={{
-          display: "flex",
-          gap: "15px",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: "10px",
           width: "100%",
           boxSizing: "border-box",
           marginBottom: "25px",
         }}
       >
         <div
-          className="l-rt-stat-box-blue"
+          onClick={() => setFilterStatus("ALL")}
           style={{
-            flex: 1,
+            backgroundColor: "#f1f5f9",
+            border: "1px solid #e2e8f0",
+            borderRadius: "16px",
+            padding: "12px",
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
-          }}
-        >
-          <p className="l-rt-stat-title-blue">
-            {t.totalReports.split(" ")[0]}
-            <br />
-            {t.totalReports.split(" ")[1]}
-          </p>
-          <h3 className="l-rt-stat-num-blue">{totalSystemReports}</h3>
-        </div>
-        <div
-          className="l-rt-stat-box-yellow"
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
+            cursor: "pointer",
+            opacity: filterStatus === "ALL" ? 1 : 0.45,
+            transform: filterStatus === "ALL" ? "scale(1.03)" : "scale(1)",
+            transition: "all 0.2s ease",
           }}
         >
           <p
-            className="l-rt-stat-title-yellow"
-            style={{ textTransform: "uppercase" }}
+            style={{
+              margin: 0,
+              fontSize: "0.65rem",
+              fontWeight: "800",
+              color: "#475569",
+              textTransform: "uppercase",
+            }}
           >
-            NUMBER OF
+            Total
             <br />
-            ASSIGNED REPORTS
+            Reports
           </p>
-          <h3 className="l-rt-stat-num-yellow">
-            {activeAssignedReports.length}
+          <h3
+            style={{
+              margin: "8px 0 0 0",
+              fontSize: "1.3rem",
+              fontWeight: "900",
+              color: "#1e293b",
+            }}
+          >
+            {totalSystemReports}
+          </h3>
+        </div>
+
+        <div
+          onClick={() => handleFilterClick("ON QUEUE")}
+          style={{
+            backgroundColor: "#fffbeb",
+            border: "1px solid #fde047",
+            borderRadius: "16px",
+            padding: "12px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            opacity:
+              filterStatus === "ALL" || filterStatus === "ON QUEUE" ? 1 : 0.45,
+            transform: filterStatus === "ON QUEUE" ? "scale(1.03)" : "scale(1)",
+            transition: "all 0.2s ease",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.65rem",
+              fontWeight: "900",
+              color: "#b45309",
+              textTransform: "uppercase",
+            }}
+          >
+            On
+            <br />
+            Queue
+          </p>
+          <h3
+            style={{
+              margin: "8px 0 0 0",
+              fontSize: "1.3rem",
+              fontWeight: "900",
+              color: "#b45309",
+            }}
+          >
+            {onQueueCount}
+          </h3>
+        </div>
+
+        <div
+          onClick={() => handleFilterClick("IN PROGRESS")}
+          style={{
+            backgroundColor: "#f0fdf4",
+            border: "1px solid #86efac",
+            borderRadius: "16px",
+            padding: "12px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            opacity:
+              filterStatus === "ALL" || filterStatus === "IN PROGRESS"
+                ? 1
+                : 0.45,
+            transform:
+              filterStatus === "IN PROGRESS" ? "scale(1.03)" : "scale(1)",
+            transition: "all 0.2s ease",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.65rem",
+              fontWeight: "900",
+              color: "#15803d",
+              textTransform: "uppercase",
+            }}
+          >
+            In
+            <br />
+            Progress
+          </p>
+          <h3
+            style={{
+              margin: "8px 0 0 0",
+              fontSize: "1.3rem",
+              fontWeight: "900",
+              color: "#15803d",
+            }}
+          >
+            {inProgressCount}
           </h3>
         </div>
       </div>
 
-      <h2 className="l-rt-section-title" style={{ marginBottom: 0 }}>
-        <span className="text-yellow">{t.assigned}</span>{" "}
-        <span className="text-navy">{t.reports}</span>
-      </h2>
-
       <div
         style={{
           display: "flex",
-          flexWrap: "wrap",
-          gap: "10px",
-          padding: "5px 0",
-          marginTop: "10px",
+          alignItems: "center",
+          justifyContent: "space-between",
           marginBottom: "15px",
         }}
       >
-        {["ALL", "PENDING", "IN PROGRESS"].map((status) => {
-          let displayName =
-            status === "ALL"
-              ? t.all
-              : status === "PENDING"
-                ? t.pending
-                : t.inProgress;
-          return (
-            <button
-              key={status}
-              onClick={() => setFilterStatus(status)}
-              style={{
-                padding: "10px 18px",
-                borderRadius: "50px",
-                border: "none",
-                fontWeight: "900",
-                fontSize: "0.75rem",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                backgroundColor:
-                  filterStatus === status ? "#1b0b8c" : "#e2e8f0",
-                color: filterStatus === status ? "#ffffff" : "#475569",
-                boxShadow:
-                  filterStatus === status
-                    ? "0 4px 10px rgba(27,11,140,0.2)"
-                    : "none",
-                flexShrink: 0,
-              }}
-            >
-              {displayName}
-            </button>
-          );
-        })}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <ClipboardList size={20} color="#1b0b8c" />
+          <h2 className="l-rt-section-title" style={{ margin: 0 }}>
+            <span className="text-yellow">TEAM</span>{" "}
+            <span className="text-navy">QUEUE</span>
+          </h2>
+        </div>
+
+        {filterStatus !== "ALL" && (
+          <button
+            onClick={() => setFilterStatus("ALL")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#64748b",
+              fontWeight: "bold",
+              fontSize: "0.85rem",
+              textDecoration: "underline",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            View All
+          </button>
+        )}
       </div>
 
       <div
@@ -364,31 +451,39 @@ function LinemanReportTab({
         {loading ? (
           <p className="l-rt-loading">{t.loadingAssignments}</p>
         ) : filteredActiveReports.length === 0 ? (
-          <p
-            className="l-rt-loading"
-            style={{ color: "#64748b", background: "transparent" }}
-          >
-            {t.noActiveReports}
-          </p>
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <p
+              className="l-rt-loading"
+              style={{
+                color: "#64748b",
+                background: "transparent",
+                margin: "0 0 5px 0",
+              }}
+            >
+              {t.noActiveReports}
+            </p>
+            {filterStatus !== "ALL" && (
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "#94a3b8" }}>
+                Try selecting a different filter.
+              </p>
+            )}
+          </div>
         ) : (
           filteredActiveReports.map((report) => {
             const statusName =
               report.report_statuses?.name?.toUpperCase() || "UNKNOWN";
-            let displayStatusName =
-              statusName === "PENDING"
-                ? t.pending
-                : statusName === "IN PROGRESS"
-                  ? t.inProgress
-                  : statusName;
 
+            let displayStatusName = statusName;
             let badgeBg = "#f1f5f9",
               badgeColor = "#475569",
               badgeBorder = "#cbd5e1";
-            if (statusName === "PENDING") {
+
+            if (statusName === "ON QUEUE") {
               badgeBg = "#fffbeb";
               badgeColor = "#ca8a04";
               badgeBorder = "#fef08a";
             } else if (statusName === "IN PROGRESS") {
+              displayStatusName = t.inProgress;
               badgeBg = "#f0f9ff";
               badgeColor = "#0284c7";
               badgeBorder = "#bae6fd";
@@ -396,7 +491,7 @@ function LinemanReportTab({
 
             return (
               <div
-                key={`assigned-${report.id}`}
+                key={`queue-${report.id}`}
                 onClick={() => setSelectedReport(report)}
                 style={{
                   backgroundColor: "#ffffff",
@@ -412,7 +507,14 @@ function LinemanReportTab({
                   border: "1px solid #f1f5f9",
                   width: "100%",
                   boxSizing: "border-box",
+                  transition: "transform 0.1s",
                 }}
+                onMouseDown={(e) =>
+                  (e.currentTarget.style.transform = "scale(0.98)")
+                }
+                onMouseUp={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
               >
                 <div
                   style={{

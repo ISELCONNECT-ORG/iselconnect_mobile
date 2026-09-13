@@ -104,6 +104,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDelayModal, setShowDelayModal] = useState(false);
   const [delayReason, setDelayReason] = useState("");
+  const [isSubmittingDelay, setIsSubmittingDelay] = useState(false);
 
   const [companions, setCompanions] = useState([]);
   const [adminRemarks, setAdminRemarks] = useState("");
@@ -402,7 +403,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         .from("assignments")
         .update({ inprogress_at: new Date().toISOString() })
         .eq("report_id", report.id);
-      await logSystemAction("START_REPORT", `Started report #${report.id}`);
+      await logSystemAction("START_REPORT", `Started report #${report.id}.`);
       setActiveStatus("IN PROGRESS");
     } catch (e) {
       alert(e.message);
@@ -472,18 +473,48 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     }
   };
 
+  // 🌟 FIXED: Implemented precise column matching (residents_id) and protected error boundary
   const handleDelaySubmit = async () => {
     if (!delayReason.trim()) return;
-    setIsSubmitting(true);
+    setIsSubmittingDelay(true);
     try {
-      await supabase
+      // 1. Update the Report table
+      const { error: updateError } = await supabase
         .from("reports")
         .update({ delay_reason: delayReason.trim() })
         .eq("id", report.id);
+
+      if (updateError) throw updateError;
+
+      // 2. Safely grab the resident ID
+      const { data: repData } = await supabase
+        .from("reports")
+        .select("residents_id")
+        .eq("id", report.id)
+        .single();
+
+      // 3. Post to notifications using residents_id (Matches schema exactly)
+      if (repData?.residents_id) {
+        const { error: notifError } = await supabase
+          .from("notifications")
+          .insert([
+            {
+              residents_id: repData.residents_id,
+              title: "Report Delay Notice",
+              message: `Delay reported for your issue (${report.report_types?.name || "Report #" + report.id}). Reason: ${delayReason.trim()}`,
+            },
+          ]);
+
+        if (notifError) {
+          console.error("Supabase Notification Error:", notifError.message);
+        }
+      }
+
       await logSystemAction(
         "REPORT_DELAYED",
         `Delayed report #${report.id}: ${delayReason.trim()}`,
       );
+
       setShowDelayModal(false);
       setDelayReason("");
       setSuccessModal({
@@ -491,9 +522,9 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         msg: "Delay notice sent successfully!",
       });
     } catch (e) {
-      alert(e.message);
+      alert("Failed to submit delay: " + e.message);
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingDelay(false);
     }
   };
 
@@ -688,7 +719,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         animation: "containerTransformExp 0.4s forwards",
       }}
     >
-      {/* 🌟 FIXED: Removed borderTop from the success modal box */}
+      {/* Reusable Modals */}
       {successModal && (
         <div
           className="success-modal-overlay"
@@ -856,7 +887,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                 </button>
                 <button
                   onClick={handleDelaySubmit}
-                  disabled={isSubmitting || !delayReason.trim()}
+                  disabled={isSubmittingDelay || !delayReason.trim()}
                   style={{
                     flex: 1,
                     padding: "12px",
@@ -867,7 +898,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                     fontWeight: "bold",
                   }}
                 >
-                  Submit
+                  {isSubmittingDelay ? "Sending..." : "Submit"}
                 </button>
               </div>
             </div>

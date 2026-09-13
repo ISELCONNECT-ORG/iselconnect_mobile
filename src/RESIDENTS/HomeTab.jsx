@@ -60,7 +60,7 @@ function HomeTab() {
       const { data: reportsData, error: reportsError } = await supabase
         .from("reports")
         .select(
-          `id, landmark, description, remarks, photo_url, resolved_photo_url, created_at, resolution_time, purok_sitio, report_type_id, latitude, longitude, report_types ( name, priority_level ), report_statuses ( name ), report_ratings ( id ), barangays ( name ), municipalities ( name )`,
+          `id, landmark, description, remarks, photo_url, resolved_photo_url, created_at, resolution_time, purok_sitio, report_type_id, latitude, longitude, report_types ( name, priority_level ), report_statuses ( name ), report_ratings ( id ), barangays ( name ), municipalities ( name ), delay_reason`,
         )
         .eq("residents_id", user.id)
         .order("created_at", { ascending: false });

@@ -38,7 +38,6 @@ function LinemanReportTab({
 
   const [linemanName, setLinemanName] = useState("");
   const [assignedReports, setAssignedReports] = useState([]);
-  const [totalSystemReports, setTotalSystemReports] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
 
@@ -59,7 +58,7 @@ function LinemanReportTab({
 
       const { data: userData } = await supabase
         .from("users")
-        .select("first_name, branch_id")
+        .select("first_name")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -85,15 +84,6 @@ function LinemanReportTab({
         });
         setAssignedReports(sortedAssignedReports);
       }
-
-      let countQuery = supabase
-        .from("reports")
-        .select("*", { count: "exact", head: true });
-      if (userData?.branch_id)
-        countQuery = countQuery.eq("branch_id", userData.branch_id);
-
-      const { count: systemTotalCount } = await countQuery;
-      if (systemTotalCount !== null) setTotalSystemReports(systemTotalCount);
     } catch (error) {
       console.error("Error fetching lineman queue data:", error.message);
     } finally {
@@ -126,11 +116,11 @@ function LinemanReportTab({
     (r) => r.report_statuses?.name?.toUpperCase() !== "RESOLVED",
   );
 
-  const onQueueCount = assignedReports.filter(
+  const onQueueCount = activeAssignedReports.filter(
     (r) => r.report_statuses?.name?.toUpperCase() === "ON QUEUE",
   ).length;
 
-  const inProgressCount = assignedReports.filter(
+  const inProgressCount = activeAssignedReports.filter(
     (r) => r.report_statuses?.name?.toUpperCase() === "IN PROGRESS",
   ).length;
 
@@ -156,6 +146,7 @@ function LinemanReportTab({
           setSelectedReport(null);
           fetchDashboardData();
         }}
+        hasInProgress={inProgressCount > 0} // 🌟 NEW: Passed down so the detail screen knows!
       />
     );
   }
@@ -302,7 +293,7 @@ function LinemanReportTab({
           >
             Total
             <br />
-            Reports
+            Assigned
           </p>
           <h3
             style={{
@@ -312,7 +303,7 @@ function LinemanReportTab({
               color: "#1e293b",
             }}
           >
-            {totalSystemReports}
+            {activeAssignedReports.length}
           </h3>
         </div>
 

@@ -12,6 +12,8 @@ import {
   MessageSquare,
   AlertCircle,
   PlayCircle,
+  Clock,
+  ClipboardList,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -20,55 +22,111 @@ import "../Lineman.css";
 const base64ToBlob = (base64, mimeType = "image/jpeg") => {
   const byteCharacters = atob(base64.split(",")[1]);
   const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
+  for (let i = 0; i < byteCharacters.length; i++)
     byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
   return new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
 };
 
+// Reusable Full-Screen Wrapper for Map, Camera, and Remarks
+const FullScreenWrapper = ({ title, onBack, isDark, children }) => (
+  <div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      width: "100vw",
+      height: "100vh",
+      background: isDark ? "#000" : "#f8fafc",
+      zIndex: 99999,
+      display: "flex",
+      flexDirection: "column",
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "20px 15px",
+        background: isDark ? "#000" : "#1b0b8c",
+        flexShrink: 0,
+      }}
+    >
+      <button
+        onClick={onBack}
+        style={{
+          background: "transparent",
+          border: "none",
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          cursor: "pointer",
+        }}
+      >
+        <ChevronLeft size={32} color="#fff" />
+      </button>
+      <span
+        style={{
+          color: "#fff",
+          fontWeight: "900",
+          letterSpacing: "1px",
+          textTransform: "uppercase",
+          fontSize: "1rem",
+        }}
+      >
+        {title}
+      </span>
+      <div style={{ width: 32 }}></div>
+    </div>
+    {children}
+  </div>
+);
+
 function LinemanReportDetail({ report, onBack, onReportUpdated }) {
-  const currentLang = localStorage.getItem("appLanguage") || "English";
-  const t = translations[currentLang];
-
-  const layoutRef = useRef(null);
-  const scrollContainerRef = useRef(null);
-
-  const mapContainerRef = useRef(null);
-  const mapRef = useRef(null);
-  const markerRef = useRef(null);
-  const watchIdRef = useRef(null);
-  const webcamRef = useRef(null);
-
-  const linemanMarkerRef = useRef(null);
-  const lineRef = useRef(null);
+  const t = translations[localStorage.getItem("appLanguage") || "English"];
+  const mapContainerRef = useRef(null),
+    mapRef = useRef(null),
+    lineRef = useRef(null);
+  const markerRef = useRef(null),
+    linemanMarkerRef = useRef(null),
+    webcamRef = useRef(null),
+    watchIdRef = useRef(null);
 
   const [activeStatus, setActiveStatus] = useState(
     report.report_statuses?.name?.toUpperCase() || "PENDING",
   );
-
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModal, setSuccessModal] = useState(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isRemarksOpen, setIsRemarksOpen] = useState(false);
   const [evidencePhoto, setEvidencePhoto] = useState(null);
   const [resolutionRemarks, setResolutionRemarks] = useState("");
   const [showMap, setShowMap] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDelayModal, setShowDelayModal] = useState(false);
+  const [delayReason, setDelayReason] = useState("");
 
   const [companions, setCompanions] = useState([]);
   const [adminRemarks, setAdminRemarks] = useState("");
-  const [loadingAssignmentDetails, setLoadingAssignmentDetails] =
-    useState(true);
+  const [assignedTeamName, setAssignedTeamName] = useState("Loading...");
   const [currentUserId, setCurrentUserId] = useState(null);
   const [linemanLocation, setLinemanLocation] = useState(null);
-
-  // 🌟 NEW: State to hold the fetched team name
-  const [assignedTeamName, setAssignedTeamName] = useState("Loading...");
+  const [hasOtherInProgress, setHasOtherInProgress] = useState(false);
+  const [isCheckingActive, setIsCheckingActive] = useState(true);
 
   const isResolved =
     activeStatus === "RESOLVED" || activeStatus === "ADMIN VERIFIED";
-  const isPendingVerification = activeStatus === "PENDING VERIFICATION";
-  const isLocked = isResolved || isPendingVerification;
+  const isLocked = isResolved || activeStatus === "PENDING VERIFICATION";
 
+  // Hide the global navigation bar when this detail screen is open
+  useEffect(() => {
+    const navBar = document.querySelector(".bottom-nav-wrapper");
+    if (navBar) navBar.style.display = "none";
+    return () => {
+      if (navBar) navBar.style.display = "";
+    };
+  }, []);
+
+  // 1. Real-time Status Sync
   useEffect(() => {
     const channel = supabase
       .channel(`public:lineman_report_${report.id}`)
@@ -86,358 +144,268 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             .select("report_statuses(name)")
             .eq("id", report.id)
             .single();
-
-          if (data) {
+          if (data)
             setActiveStatus(
               data.report_statuses?.name?.toUpperCase() || "PENDING",
             );
-          }
         },
       )
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   }, [report.id]);
 
+  // 2. Initial Data Fetch (Team & Active Lock Check)
   useEffect(() => {
-    const resetScroll = () => {
-      window.scrollTo(0, 0);
-      if (layoutRef.current) {
-        layoutRef.current.scrollIntoView({
-          behavior: "instant",
-          block: "start",
-        });
-      }
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTop = 0;
-      }
-      const parentTab = document.querySelector(".l-rt-tab");
-      const appContainer = document.querySelector(".lineman-dashboard-layout");
-      if (parentTab) parentTab.scrollTop = 0;
-      if (appContainer) appContainer.scrollTop = 0;
-    };
-
-    resetScroll();
-    const timer = setTimeout(resetScroll, 50);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    const fetchAssignmentDetails = async () => {
-      if (!report?.id) return;
+    let isMounted = true;
+    const fetchInitData = async () => {
       try {
-        setLoadingAssignmentDetails(true);
+        setIsCheckingActive(true);
         const {
           data: { user },
         } = await supabase.auth.getUser();
-        setCurrentUserId(user?.id);
+        if (!user) return;
+        setCurrentUserId(user.id);
 
-        const { data, error } = await supabase
+        const { data: assigns } = await supabase
           .from("assignments")
-          .select(`lineman_id, admin_remarks, users ( first_name, last_name )`)
+          .select(`lineman_id, admin_remarks, users(first_name, last_name)`)
           .eq("report_id", report.id);
+        if (assigns && assigns.length > 0) {
+          setCompanions([
+            ...new Set(
+              assigns
+                .map((a) =>
+                  `${a.users?.first_name || ""} ${a.users?.last_name || ""}`.trim(),
+                )
+                .filter(Boolean),
+            ),
+          ]);
+          setAdminRemarks(
+            assigns.find((a) => a.lineman_id === user.id)?.admin_remarks ||
+              assigns[0].admin_remarks ||
+              "",
+          );
 
-        if (error) throw error;
+          const { data: teams } = await supabase
+            .from("lineman_teams")
+            .select("*");
+          const myTeam = teams?.find(
+            (t) =>
+              t.team_leader === assigns[0].lineman_id ||
+              (Array.isArray(t.team_members)
+                ? t.team_members.some(
+                    (m) =>
+                      m === assigns[0].lineman_id ||
+                      m?.id === assigns[0].lineman_id,
+                  )
+                : t.team_members?.includes(assigns[0].lineman_id)),
+          );
+          setAssignedTeamName(myTeam ? myTeam.team_name : "Assigned Team");
+        }
 
-        if (data && data.length > 0) {
-          // 🌟 UPDATED: Gather all assigned personnel to display the full team list
-          const allLinemen = data
-            .map((a) =>
-              `${a.users?.first_name || ""} ${a.users?.last_name || ""}`.trim(),
-            )
-            .filter(Boolean);
-          setCompanions([...new Set(allLinemen)]);
-
-          const myAssignment =
-            data.find((a) => a.lineman_id === user?.id) || data[0];
-          if (myAssignment && myAssignment.admin_remarks) {
-            setAdminRemarks(myAssignment.admin_remarks);
+        if (activeStatus === "ON QUEUE") {
+          const { data: activeTasks } = await supabase
+            .from("assignments")
+            .select("report_id")
+            .eq("lineman_id", user.id);
+          if (activeTasks?.length > 0) {
+            const { data: activeRep } = await supabase
+              .from("reports")
+              .select("id, report_statuses(name)")
+              .in(
+                "id",
+                activeTasks.map((a) => a.report_id),
+              );
+            if (isMounted)
+              setHasOtherInProgress(
+                !!activeRep?.some(
+                  (r) =>
+                    r.id !== report.id &&
+                    r.report_statuses?.name?.toUpperCase() === "IN PROGRESS",
+                ),
+              );
           }
-
-          // 🌟 NEW: Fetch the team name based on the assigned lineman
-          const sampleUserId = data[0].lineman_id;
-          let foundTeamName = "Assigned Team";
-
-          if (sampleUserId) {
-            const { data: teamsData } = await supabase
-              .from("lineman_teams")
-              .select("*");
-            if (teamsData) {
-              const myTeam = teamsData.find((team) => {
-                if (team.team_leader === sampleUserId) return true;
-                if (Array.isArray(team.team_members)) {
-                  return team.team_members.some(
-                    (member) =>
-                      member === sampleUserId ||
-                      member?.value === sampleUserId ||
-                      member?.id === sampleUserId,
-                  );
-                } else if (typeof team.team_members === "string") {
-                  return team.team_members.includes(sampleUserId);
-                }
-                return false;
-              });
-              if (myTeam) foundTeamName = myTeam.team_name || "Assigned Team";
-            }
-          }
-          setAssignedTeamName(foundTeamName);
         }
       } catch (err) {
-        console.error(err.message);
-        setAssignedTeamName("Assigned Team");
+        console.error(err);
       } finally {
-        setLoadingAssignmentDetails(false);
+        if (isMounted) setIsCheckingActive(false);
       }
     };
-    fetchAssignmentDetails();
-  }, [report.id]);
+    fetchInitData();
+    return () => {
+      isMounted = false;
+    };
+  }, [report.id, activeStatus]);
 
+  // 3. Live Tracking
   useEffect(() => {
-    let activeWatchId = null;
-
-    const startNativeTracking = async () => {
-      if (activeStatus === "IN PROGRESS" && currentUserId) {
-        try {
-          const position = await Geolocation.getCurrentPosition({
-            enableHighAccuracy: true,
-          });
+    if (activeStatus !== "IN PROGRESS" || !currentUserId) return;
+    const track = async () => {
+      try {
+        const updateLoc = async (pos) => {
           setLinemanLocation({
-            lat: position.coords.latitude,
-            lon: position.coords.longitude,
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
           });
-
           await supabase
             .from("assignments")
             .update({
-              current_lat: position.coords.latitude,
-              current_lon: position.coords.longitude,
+              current_lat: pos.coords.latitude,
+              current_lon: pos.coords.longitude,
             })
             .eq("report_id", report.id)
             .eq("lineman_id", currentUserId);
-
-          activeWatchId = await Geolocation.watchPosition(
-            { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
-            async (pos) => {
-              if (pos) {
-                setLinemanLocation({
-                  lat: pos.coords.latitude,
-                  lon: pos.coords.longitude,
-                });
-                await supabase
-                  .from("assignments")
-                  .update({
-                    current_lat: pos.coords.latitude,
-                    current_lon: pos.coords.longitude,
-                  })
-                  .eq("report_id", report.id)
-                  .eq("lineman_id", currentUserId);
-              }
-            },
-          );
-          watchIdRef.current = activeWatchId;
-        } catch (err) {
-          console.warn("Native GPS failed:", err.message);
-        }
+        };
+        const pos = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+        });
+        await updateLoc(pos);
+        watchIdRef.current = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, maximumAge: 5000 },
+          (pos) => pos && updateLoc(pos),
+        );
+      } catch (e) {
+        console.warn("GPS failed", e);
       }
     };
-
-    startNativeTracking();
-
-    return () => {
-      if (watchIdRef.current) {
-        Geolocation.clearWatch({ id: watchIdRef.current });
-        watchIdRef.current = null;
-      }
-    };
+    track();
+    return () =>
+      watchIdRef.current && Geolocation.clearWatch({ id: watchIdRef.current });
   }, [activeStatus, currentUserId, report.id]);
 
+  // 4. Map & Routing Rendering
   useEffect(() => {
-    if (!showMap) {
+    if (!showMap || !mapContainerRef.current) {
       if (mapRef.current) {
         mapRef.current.remove();
-        mapRef.current = null;
-        markerRef.current = null;
-        linemanMarkerRef.current = null;
-        lineRef.current = null;
+        mapRef.current =
+          markerRef.current =
+          linemanMarkerRef.current =
+          lineRef.current =
+            null;
       }
       return;
     }
-    const lat = report.latitude ? parseFloat(report.latitude) : 16.7805;
-    const lon = report.longitude ? parseFloat(report.longitude) : 121.6508;
-    setTimeout(() => {
-      if (!mapContainerRef.current) return;
-      const customIcon = L.divIcon({
-        className: "custom-leaflet-marker",
-        html: `<div style="background-color: #ea4335; width: 22px; height: 22px; border-radius: 50%; border: 4px solid #ffffff; box-shadow: 0 4px 8px rgba(0,0,0,0.4);"></div>`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11],
-      });
-      if (!mapRef.current) {
-        mapRef.current = L.map(mapContainerRef.current, {
-          zoomControl: false,
-        }).setView([lat, lon], 16);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "&copy; OpenStreetMap",
-          maxZoom: 19,
-        }).addTo(mapRef.current);
-      } else {
-        mapRef.current.setView([lat, lon], 16);
-      }
-      if (markerRef.current) markerRef.current.remove();
-      markerRef.current = L.marker([lat, lon], { icon: customIcon }).addTo(
+    const lat = parseFloat(report.latitude || 16.7805),
+      lon = parseFloat(report.longitude || 121.6508);
+    const targetIcon = L.divIcon({
+      className: "marker",
+      html: `<div style="background:#ea4335;width:22px;height:22px;border-radius:50%;border:4px solid #fff;box-shadow:0 4px 8px rgba(0,0,0,0.4)"></div>`,
+      iconSize: [22, 22],
+    });
+
+    if (!mapRef.current) {
+      mapRef.current = L.map(mapContainerRef.current, {
+        zoomControl: false,
+      }).setView([lat, lon], 16);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(
         mapRef.current,
       );
-    }, 100);
-  }, [report, showMap]);
+    }
+    if (!markerRef.current)
+      markerRef.current = L.marker([lat, lon], { icon: targetIcon }).addTo(
+        mapRef.current,
+      );
 
-  useEffect(() => {
-    if (!showMap || !linemanLocation || !report.latitude || !report.longitude)
-      return;
-
-    let isDrawing = true;
-
-    const drawMapElements = async () => {
-      if (!isDrawing) return;
-
-      if (!mapRef.current) {
-        setTimeout(drawMapElements, 100);
-        return;
-      }
-
-      const linemanLat = parseFloat(linemanLocation.lat);
-      const linemanLon = parseFloat(linemanLocation.lon);
-      const reportLat = parseFloat(report.latitude);
-      const reportLon = parseFloat(report.longitude);
-
-      const linemanIcon = L.divIcon({
-        className: "live-tracker-icon",
-        html: `<div style="background-color: #10b981; width: 26px; height: 26px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 0 15px rgba(16, 185, 129, 0.8); display: flex; align-items: center; justify-content: center; font-size: 14px; animation: pulse-ring 2s infinite;">⚡</div>`,
+    if (linemanLocation) {
+      const lLat = parseFloat(linemanLocation.lat),
+        lLon = parseFloat(linemanLocation.lon);
+      const lIcon = L.divIcon({
+        html: `<div style="background:#10b981;width:26px;height:26px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 15px rgba(16,185,129,0.8);display:flex;align-items:center;justify-content:center;font-size:14px">⚡</div>`,
         iconSize: [26, 26],
-        iconAnchor: [13, 13],
       });
 
-      if (!linemanMarkerRef.current) {
-        linemanMarkerRef.current = L.marker([linemanLat, linemanLon], {
-          icon: linemanIcon,
+      if (!linemanMarkerRef.current)
+        linemanMarkerRef.current = L.marker([lLat, lLon], {
+          icon: lIcon,
           zIndexOffset: 1000,
         }).addTo(mapRef.current);
-      } else {
-        linemanMarkerRef.current.setLatLng([linemanLat, linemanLon]);
-      }
+      else linemanMarkerRef.current.setLatLng([lLat, lLon]);
 
-      try {
-        const response = await fetch(
-          `https://router.project-osrm.org/route/v1/driving/${linemanLon},${linemanLat};${reportLon},${reportLat}?overview=full&geometries=geojson`,
-        );
-        const data = await response.json();
-
-        if (!isDrawing) return;
-
-        let routePoints = [];
-
-        if (data.routes && data.routes[0]) {
-          routePoints = data.routes[0].geometry.coordinates.map((coord) => [
-            coord[1],
-            coord[0],
-          ]);
-        } else {
-          routePoints = [
-            [linemanLat, linemanLon],
-            [reportLat, reportLon],
+      fetch(
+        `https://router.project-osrm.org/route/v1/driving/${lLon},${lLat};${lon},${lat}?overview=full&geometries=geojson`,
+      )
+        .then((r) => r.json())
+        .then((data) => {
+          const pts = data.routes?.[0]
+            ? data.routes[0].geometry.coordinates.map((c) => [c[1], c[0]])
+            : [
+                [lLat, lLon],
+                [lat, lon],
+              ];
+          if (!lineRef.current) {
+            lineRef.current = L.polyline(pts, {
+              color: "#1b0b8c",
+              weight: 5,
+              opacity: 0.8,
+            }).addTo(mapRef.current);
+            mapRef.current.fitBounds(lineRef.current.getBounds(), {
+              padding: [50, 50],
+            });
+          } else lineRef.current.setLatLngs(pts);
+        })
+        .catch(() => {
+          const fallback = [
+            [lLat, lLon],
+            [lat, lon],
           ];
-        }
+          if (!lineRef.current)
+            lineRef.current = L.polyline(fallback, {
+              color: "#1b0b8c",
+              weight: 5,
+              dashArray: "10,10",
+            }).addTo(mapRef.current);
+          else lineRef.current.setLatLngs(fallback);
+        });
+    }
+  }, [showMap, report, linemanLocation]);
 
-        if (!lineRef.current) {
-          lineRef.current = L.polyline(routePoints, {
-            color: "#1b0b8c",
-            weight: 5,
-            opacity: 0.8,
-          }).addTo(mapRef.current);
-
-          mapRef.current.fitBounds(lineRef.current.getBounds(), {
-            padding: [50, 50],
-            maxZoom: 18,
-          });
-        } else {
-          lineRef.current.setLatLngs(routePoints);
-        }
-      } catch (error) {
-        console.error("Routing failed, falling back to straight line:", error);
-        if (!isDrawing) return;
-
-        const fallbackPoints = [
-          [linemanLat, linemanLon],
-          [reportLat, reportLon],
-        ];
-        if (!lineRef.current) {
-          lineRef.current = L.polyline(fallbackPoints, {
-            color: "#1b0b8c",
-            weight: 5,
-            dashArray: "10, 10",
-            opacity: 0.8,
-          }).addTo(mapRef.current);
-          mapRef.current.fitBounds(lineRef.current.getBounds(), {
-            padding: [50, 50],
-            maxZoom: 18,
-          });
-        } else {
-          lineRef.current.setLatLngs(fallbackPoints);
-        }
-      }
-    };
-
-    drawMapElements();
-
-    return () => {
-      isDrawing = false;
-    };
-  }, [showMap, linemanLocation, report.latitude, report.longitude]);
-
-  useEffect(() => {
-    const navBar = document.querySelector(".bottom-nav-wrapper");
-    if (navBar) navBar.style.display = "none";
-    return () => {
-      if (navBar) navBar.style.display = "";
-    };
-  }, []);
-
+  // Handlers
   const handleStartClick = async () => {
+    if (hasOtherInProgress || isCheckingActive) return;
     setIsSubmitting(true);
     try {
-      const { data: statusData, error: statusError } = await supabase
+      const { data: dbCheck } = await supabase
+        .from("assignments")
+        .select("report_id")
+        .eq("lineman_id", currentUserId);
+      if (dbCheck?.length > 0) {
+        const { data: act } = await supabase
+          .from("reports")
+          .select("id, report_statuses(name)")
+          .in(
+            "id",
+            dbCheck.map((a) => a.report_id),
+          );
+        if (
+          act?.some(
+            (r) =>
+              r.id !== report.id &&
+              r.report_statuses?.name?.toUpperCase() === "IN PROGRESS",
+          )
+        ) {
+          setHasOtherInProgress(true);
+          return alert("Finish your active task first.");
+        }
+      }
+      const { data: st } = await supabase
         .from("report_statuses")
         .select("id")
         .ilike("name", "IN PROGRESS")
         .single();
-
-      if (statusError || !statusData) {
-        throw new Error("Could not find IN PROGRESS status in database.");
-      }
-
-      const { error: reportError } = await supabase
+      await supabase
         .from("reports")
-        .update({ status_id: statusData.id })
+        .update({ status_id: st.id })
         .eq("id", report.id);
-
-      if (reportError) throw reportError;
-
-      const { error: assignError } = await supabase
+      await supabase
         .from("assignments")
         .update({ inprogress_at: new Date().toISOString() })
         .eq("report_id", report.id);
-
-      if (assignError) throw assignError;
-
-      await logSystemAction(
-        "START_REPORT",
-        `Lineman started work on report #${report.id}.`,
-      );
-
+      await logSystemAction("START_REPORT", `Started report #${report.id}`);
       setActiveStatus("IN PROGRESS");
-    } catch (err) {
-      alert("Failed to start report: " + err.message);
+    } catch (e) {
+      alert(e.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -462,116 +430,77 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const confirmStatusUpdate = async () => {
     setIsSubmitting(true);
     try {
-      if (!evidencePhoto) throw new Error("Evidence photo is missing.");
-      if (!resolutionRemarks.trim())
-        throw new Error("Remarks are required to verify resolution.");
-
+      if (!evidencePhoto || !resolutionRemarks.trim())
+        throw new Error("Missing photo or remarks.");
       const fileName = `resolved-${report.id}-${Date.now()}.jpg`;
-      const imageBlob = base64ToBlob(evidencePhoto);
-
-      const { error: uploadError } = await supabase.storage
+      await supabase.storage
         .from("report_photos")
-        .upload(fileName, imageBlob, { contentType: "image/jpeg" });
+        .upload(fileName, base64ToBlob(evidencePhoto), {
+          contentType: "image/jpeg",
+        });
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("report_photos").getPublicUrl(fileName);
 
-      if (uploadError) throw new Error("Failed to upload evidence photo.");
-
-      const { data: publicUrlData } = supabase.storage
-        .from("report_photos")
-        .getPublicUrl(fileName);
-
-      const updatePayload = {
-        status_id: 4,
-        resolved_photo_url: publicUrlData.publicUrl,
-        remarks: resolutionRemarks.trim(),
-      };
-
-      const { data, error } = await supabase
+      await supabase
         .from("reports")
-        .update(updatePayload)
-        .eq("id", report.id)
-        .select();
-
-      if (error) throw error;
-      if (!data || data.length === 0)
-        throw new Error("Update blocked by Supabase!");
-
+        .update({
+          status_id: 4,
+          resolved_photo_url: publicUrl,
+          remarks: resolutionRemarks.trim(),
+        })
+        .eq("id", report.id);
       await supabase
         .from("assignments")
         .update({ completion_at: new Date().toISOString() })
         .eq("report_id", report.id);
-
       await logSystemAction(
         "UPDATE_REPORT_STATUS",
-        `Lineman submitted report #${report.id} for verification.`,
+        `Submitted report #${report.id} for verification.`,
       );
 
       setActiveStatus("PENDING VERIFICATION");
-      setShowSuccessModal(true);
-    } catch (err) {
-      alert(err.message);
+      setSuccessModal({
+        title: t.updatedTitle || "UPDATED",
+        msg: `${t.statusUpdatedText || "Status successfully updated to"} PENDING VERIFICATION!`,
+      });
+    } catch (e) {
+      alert(e.message);
     } finally {
       setIsSubmitting(false);
       setIsRemarksOpen(false);
     }
   };
 
-  if (showMap) {
+  const handleDelaySubmit = async () => {
+    if (!delayReason.trim()) return;
+    setIsSubmitting(true);
+    try {
+      await supabase
+        .from("reports")
+        .update({ delay_reason: delayReason.trim() })
+        .eq("id", report.id);
+      await logSystemAction(
+        "REPORT_DELAYED",
+        `Delayed report #${report.id}: ${delayReason.trim()}`,
+      );
+      setShowDelayModal(false);
+      setDelayReason("");
+      setSuccessModal({
+        title: "NOTICE SENT",
+        msg: "Delay notice sent successfully!",
+      });
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Render Full Screen Overlays
+  if (showMap)
     return (
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100vw",
-          height: "100vh",
-          background: "#f8fafc",
-          zIndex: 99999,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <style>{`
-          @keyframes pulse-ring {
-            0% { transform: scale(0.85); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 12px rgba(16, 185, 129, 0); }
-            100% { transform: scale(0.85); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-          }
-        `}</style>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            padding: "20px 15px",
-            background: "#1b0b8c",
-            flexShrink: 0,
-          }}
-        >
-          <button
-            onClick={() => setShowMap(false)}
-            style={{
-              background: "transparent",
-              border: "none",
-              padding: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-            }}
-          >
-            <ChevronLeft size={32} color="#fff" />
-          </button>
-          <span
-            style={{
-              color: "#fff",
-              fontWeight: "900",
-              marginLeft: "10px",
-              letterSpacing: "1px",
-              fontSize: "1rem",
-            }}
-          >
-            {t.locationMap}
-          </span>
-        </div>
+      <FullScreenWrapper title={t.locationMap} onBack={() => setShowMap(false)}>
         <div style={{ flex: 1, width: "100%", position: "relative" }}>
           <div
             style={{
@@ -588,19 +517,18 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               gap: "15px",
               fontWeight: "bold",
               fontSize: "0.8rem",
-              color: "#334155",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
               <div
                 style={{
-                  width: "12px",
-                  height: "12px",
+                  width: 12,
+                  height: 12,
                   background: "#ea4335",
                   borderRadius: "50%",
-                  border: "2px solid #ffffff",
+                  border: "2px solid #fff",
                 }}
-              ></div>
+              />{" "}
               Issue
             </div>
             {activeStatus === "IN PROGRESS" && (
@@ -609,78 +537,32 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               >
                 <div
                   style={{
-                    width: "12px",
-                    height: "12px",
+                    width: 12,
+                    height: 12,
                     background: "#10b981",
                     borderRadius: "50%",
                     border: "2px solid #fff",
-                    boxShadow: "0 0 5px rgba(16,185,129,0.5)",
                   }}
-                ></div>
+                />{" "}
                 You
               </div>
             )}
           </div>
-
           <div
             ref={mapContainerRef}
             style={{ position: "absolute", top: 0, bottom: 0, width: "100%" }}
           />
         </div>
-      </div>
+      </FullScreenWrapper>
     );
-  }
 
-  if (isCameraOpen) {
+  if (isCameraOpen)
     return (
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100vw",
-          height: "100vh",
-          background: "#000",
-          zIndex: 99999,
-          display: "flex",
-          flexDirection: "column",
-        }}
+      <FullScreenWrapper
+        title="Proof of Resolution"
+        onBack={() => setIsCameraOpen(false)}
+        isDark
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "20px 15px",
-            background: "#000",
-            flexShrink: 0,
-          }}
-        >
-          <button
-            onClick={() => setIsCameraOpen(false)}
-            style={{
-              background: "transparent",
-              border: "none",
-              padding: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-            }}
-          >
-            <ChevronLeft size={32} color="#fff" />
-          </button>
-          <span
-            style={{
-              color: "#fff",
-              fontWeight: "bold",
-              textTransform: "uppercase",
-            }}
-          >
-            Proof of Resolution
-          </span>
-          <div style={{ width: 32 }}></div>
-        </div>
         <div
           style={{
             flex: 1,
@@ -691,115 +573,53 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           }}
         >
           <Webcam
-            audio={false}
             ref={webcamRef}
             screenshotFormat="image/jpeg"
             videoConstraints={{ facingMode: "environment" }}
-            mirrored={false}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-            }}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
         </div>
         <div
           style={{
             background: "#e2e8f0",
-            padding: "20px 15px 40px 15px",
+            padding: "20px 15px 40px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            flexShrink: 0,
-            borderTopLeftRadius: "30px",
-            borderTopRightRadius: "30px",
+            borderRadius: "30px 30px 0 0",
           }}
         >
-          <p
-            style={{
-              margin: "0 0 15px 0",
-              color: "#111",
-              fontWeight: "900",
-              fontSize: "0.9rem",
-            }}
-          >
+          <p style={{ margin: "0 0 15px 0", fontWeight: "900" }}>
             {t.captureTheFix}
           </p>
           <button
-            onClick={captureEvidence}
+            onClick={() => {
+              setEvidencePhoto(webcamRef.current.getScreenshot());
+              setIsCameraOpen(false);
+              setIsRemarksOpen(true);
+            }}
             style={{
-              width: "70px",
-              height: "70px",
+              width: 70,
+              height: 70,
               borderRadius: "50%",
               background: "#cbd5e1",
               border: "5px solid #fff",
               boxShadow: "0 0 0 3px #000",
-              cursor: "pointer",
             }}
-          ></button>
+          />
         </div>
-      </div>
+      </FullScreenWrapper>
     );
-  }
 
-  if (isRemarksOpen) {
+  if (isRemarksOpen)
     return (
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100vw",
-          height: "100vh",
-          background: "#f8fafc",
-          zIndex: 99999,
-          display: "flex",
-          flexDirection: "column",
+      <FullScreenWrapper
+        title="Resolution Remarks"
+        onBack={() => {
+          setIsRemarksOpen(false);
+          setIsCameraOpen(true);
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "20px 15px",
-            background: "#1b0b8c",
-            flexShrink: 0,
-          }}
-        >
-          <button
-            onClick={() => {
-              setIsRemarksOpen(false);
-              setIsCameraOpen(true);
-            }}
-            style={{
-              background: "transparent",
-              border: "none",
-              padding: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-            }}
-          >
-            <ChevronLeft size={32} color="#fff" />
-          </button>
-          <span
-            style={{
-              color: "#fff",
-              fontWeight: "900",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-            }}
-          >
-            Resolution Remarks
-          </span>
-          <div style={{ width: 32 }}></div>
-        </div>
-
         <div
           style={{
             flex: 1,
@@ -808,126 +628,159 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             padding: "20px",
           }}
         >
-          <div
+          <img
+            src={evidencePhoto}
+            alt="Proof"
             style={{
               width: "100%",
               height: "220px",
+              objectFit: "cover",
               borderRadius: "15px",
-              overflow: "hidden",
               marginBottom: "20px",
-              boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
               border: "2px solid #cbd5e1",
             }}
-          >
-            <img
-              src={evidencePhoto}
-              alt="Resolution Proof"
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          </div>
-
-          <label
-            style={{
-              color: "#1e293b",
-              fontWeight: "900",
-              marginBottom: "10px",
-              fontSize: "0.95rem",
-              textTransform: "uppercase",
-            }}
-          >
-            Action Taken / Remarks:
-          </label>
+          />
           <textarea
             value={resolutionRemarks}
             onChange={(e) => setResolutionRemarks(e.target.value)}
-            placeholder="Describe exactly what was fixed..."
+            placeholder="Describe what was fixed..."
             style={{
               width: "100%",
               height: "140px",
               padding: "15px",
               borderRadius: "15px",
               border: "1px solid #cbd5e1",
-              backgroundColor: "#ffffff",
-              color: "#1e293b",
               fontSize: "1rem",
               resize: "none",
               marginBottom: "20px",
               boxSizing: "border-box",
+              backgroundColor: "#ffffff",
+              color: "#1e293b",
               fontFamily: "inherit",
             }}
           />
-
           <button
             onClick={confirmStatusUpdate}
             disabled={isSubmitting || !resolutionRemarks.trim()}
             style={{
               marginTop: "auto",
-              backgroundColor: "#1b0b8c",
+              background: "#1b0b8c",
               color: "#fff",
               padding: "18px",
               borderRadius: "30px",
               fontWeight: "900",
-              fontSize: "1rem",
               border: "none",
-              cursor:
-                isSubmitting || !resolutionRemarks.trim()
-                  ? "not-allowed"
-                  : "pointer",
               opacity: isSubmitting || !resolutionRemarks.trim() ? 0.6 : 1,
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-              boxShadow: "0 6px 15px rgba(27, 11, 140, 0.2)",
             }}
           >
-            {isSubmitting
-              ? "Submitting for Verification..."
-              : "Submit for Verification"}
+            {isSubmitting ? "Submitting..." : "Submit Verification"}
           </button>
         </div>
-      </div>
+      </FullScreenWrapper>
     );
-  }
 
+  // Main UI
   return (
     <div
-      ref={layoutRef}
       className="detail-layout page-transition"
-      style={{ overscrollBehavior: "none", backgroundColor: "#f8fafc" }}
+      style={{
+        backgroundColor: "#f8fafc",
+        animation: "containerTransformExp 0.4s forwards",
+      }}
     >
-      <style>{`
-        @keyframes containerTransformExp {
-          0% {
-            opacity: 0;
-            transform: scale(0.85) translateY(40px);
-            border-radius: 40px;
-          }
-          100% {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-            border-radius: 0;
-          }
-        }
-        
-        .page-transition {
-          animation: containerTransformExp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
-          transform-origin: center center;
-        }
-      `}</style>
-
-      {showSuccessModal && (
-        <div className="success-modal-overlay">
-          <div className="success-modal-box">
-            <div className="success-modal-header">
-              <h2>{t.updatedTitle}</h2>
+      {/* 🌟 FIXED: Removed borderTop from the success modal box */}
+      {successModal && (
+        <div
+          className="success-modal-overlay"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            className="success-modal-box"
+            style={{
+              background: "#ffffff",
+              width: "85%",
+              maxWidth: "340px",
+              borderRadius: "24px",
+              overflow: "hidden",
+              padding: "0",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+            }}
+          >
+            <div
+              style={{
+                padding: "24px 20px 10px 20px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+              }}
+            >
+              <CheckCircle
+                size={56}
+                color="#10b981"
+                style={{ marginBottom: "16px" }}
+              />
+              <h2
+                style={{
+                  margin: "0 0 10px 0",
+                  color: "#064e3b",
+                  fontSize: "1.4rem",
+                  fontWeight: "900",
+                  textAlign: "center",
+                  textTransform: "uppercase",
+                }}
+              >
+                {successModal.title}
+              </h2>
             </div>
-            <div className="success-modal-body">
-              <p>{t.statusUpdatedText} PENDING VERIFICATION!</p>
+            <div
+              style={{
+                padding: "0 24px 24px 24px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+              }}
+            >
+              <p
+                style={{
+                  margin: "0 0 24px 0",
+                  color: "#475569",
+                  fontSize: "0.95rem",
+                  textAlign: "center",
+                  lineHeight: "1.5",
+                  fontWeight: "600",
+                }}
+              >
+                {successModal.msg}
+              </p>
               <button
-                className="success-modal-btn"
                 onClick={() => {
-                  setShowSuccessModal(false);
+                  setSuccessModal(null);
                   if (onReportUpdated) onReportUpdated();
                 }}
+                style={{
+                  width: "100%",
+                  padding: "16px",
+                  backgroundColor: "#10b981",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "50px",
+                  fontWeight: "900",
+                  fontSize: "1.05rem",
+                  textTransform: "uppercase",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 15px rgba(16, 185, 129, 0.3)",
+                  transition: "transform 0.1s",
+                }}
+                onMouseDown={(e) =>
+                  (e.currentTarget.style.transform = "scale(0.97)")
+                }
+                onMouseUp={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
               >
                 OK!
               </button>
@@ -936,99 +789,228 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         </div>
       )}
 
+      {showDelayModal && (
+        <div className="success-modal-overlay">
+          <div
+            className="success-modal-box"
+            style={{ borderTop: "6px solid #ef4444" }}
+          >
+            <AlertCircle
+              size={42}
+              color="#ef4444"
+              style={{ margin: "15px auto 5px" }}
+            />
+            <h2
+              style={{
+                color: "#ef4444",
+                textAlign: "center",
+                margin: 0,
+                fontSize: "1.3rem",
+              }}
+            >
+              REPORT DELAY
+            </h2>
+            <div className="success-modal-body" style={{ padding: "15px" }}>
+              <p
+                style={{
+                  margin: "0 0 15px 0",
+                  color: "#475569",
+                  fontSize: "0.9rem",
+                  textAlign: "center",
+                  fontWeight: "600",
+                }}
+              >
+                Enter reason for delay to notify admin and resident.
+              </p>
+              <textarea
+                value={delayReason}
+                onChange={(e) => setDelayReason(e.target.value)}
+                placeholder="e.g., Heavy rain..."
+                style={{
+                  width: "100%",
+                  height: "100px",
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "1px solid #cbd5e1",
+                  backgroundColor: "#fff",
+                  color: "#1e293b",
+                  resize: "none",
+                  marginBottom: "20px",
+                  boxSizing: "border-box",
+                }}
+              />
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={() => setShowDelayModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #cbd5e1",
+                    background: "#f1f5f9",
+                    fontWeight: "bold",
+                    color: "#475569",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelaySubmit}
+                  disabled={isSubmitting || !delayReason.trim()}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: "#ef4444",
+                    color: "#fff",
+                    fontWeight: "bold",
+                  }}
+                >
+                  Submit
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
-        ref={scrollContainerRef}
-        className="detail-scrollable-content"
-        style={{ padding: "16px 16px 180px 16px" }}
+        style={{
+          padding: "16px 16px 180px 16px",
+          overflowY: "auto",
+          height: "100%",
+        }}
       >
+        {/* Header */}
         <div
           style={{
             position: "sticky",
             top: 0,
-            margin: "-16px -16px 20px -16px",
-            padding: "calc(20px + env(safe-area-inset-top)) 16px 18px 16px",
+            margin: "-16px -16px 20px",
+            padding: "calc(20px + env(safe-area-inset-top)) 16px 16px",
             background: "rgba(248, 250, 252, 0.92)",
             backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
             zIndex: 50,
-            borderBottom: "1px solid rgba(0,0,0,0.05)",
             display: "flex",
+            justifyContent: "space-between",
             alignItems: "center",
-            gap: "12px",
+            borderBottom: "1px solid #e2e8f0",
           }}
         >
-          <button
-            onClick={onBack}
-            className="back-btn"
-            style={{ flexShrink: 0 }}
-          >
-            <ChevronLeft size={28} strokeWidth={3} />
-          </button>
-          <h2
-            className="text-navy"
-            style={{
-              margin: 0,
-              fontSize: "1.3rem",
-              fontWeight: "900",
-              letterSpacing: "1px",
-              textTransform: "uppercase",
-              lineHeight: 1.2,
-            }}
-          >
-            {report.report_types?.name || t.reportDetailsTitle}
-          </h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <button
+              onClick={onBack}
+              className="back-btn"
+              style={{ flexShrink: 0 }}
+            >
+              <ChevronLeft size={28} strokeWidth={3} />
+            </button>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: "1.3rem",
+                fontWeight: "900",
+                color: "#1b0b8c",
+                textTransform: "uppercase",
+              }}
+            >
+              {report.report_types?.name}
+            </h2>
+          </div>
+          {activeStatus === "IN PROGRESS" && (
+            <button
+              onClick={() => setShowDelayModal(true)}
+              style={{
+                background: "#fee2e2",
+                border: "none",
+                padding: "10px",
+                borderRadius: "50%",
+                color: "#ef4444",
+                flexShrink: 0,
+              }}
+            >
+              <Clock size={22} strokeWidth={3} />
+            </button>
+          )}
         </div>
 
+        {/* Lock Banner */}
         {isLocked && (
           <div
             style={{
-              margin: "0 0 15px 0",
+              margin: "0 0 15px",
               padding: "16px",
               borderRadius: "15px",
               display: "flex",
-              alignItems: "center",
               justifyContent: "center",
               gap: "10px",
               background: isResolved ? "#fef2f2" : "#f0fdfa",
               color: isResolved ? "#ef4444" : "#0d9488",
               border: isResolved ? "2px solid #fca5a5" : "2px solid #5eead4",
-              boxShadow: "0 4px 6px rgba(0,0,0,0.05)",
             }}
           >
-            {isResolved ? (
-              <CheckCircle size={22} strokeWidth={2.5} />
-            ) : (
-              <AlertCircle size={22} strokeWidth={2.5} />
-            )}
-            <span
-              style={{
-                fontWeight: "900",
-                fontSize: "0.95rem",
-                textTransform: "uppercase",
-                letterSpacing: "0.5px",
-                textAlign: "center",
-              }}
-            >
-              {isResolved ? t.reportResolved : "Waiting for Admin Verification"}
+            {isResolved ? <CheckCircle size={22} /> : <AlertCircle size={22} />}
+            <span style={{ fontWeight: "900", textTransform: "uppercase" }}>
+              {isResolved ? t.reportResolved : "Waiting for Verification"}
             </span>
           </div>
         )}
 
-        <div className="detail-photo-section">
+        {/* Photo Section */}
+        <div style={{ marginBottom: "20px" }}>
           {report.photo_url ? (
             <img
               src={report.photo_url}
-              alt="Report issue"
-              className="detail-photo"
+              alt="Issue"
+              style={{
+                width: "100%",
+                height: "220px",
+                objectFit: "cover",
+                borderRadius: "16px",
+              }}
             />
           ) : (
-            <div className="no-photo">{t.noPhotoProvided}</div>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "#f8fafc",
+                borderRadius: "16px",
+                border: "2px dashed #cbd5e1",
+                width: "100%",
+                height: "220px",
+                boxSizing: "border-box",
+                color: "#64748b",
+              }}
+            >
+              <ClipboardList
+                size={42}
+                style={{ marginBottom: "12px", color: "#94a3b8" }}
+              />
+              <h3
+                style={{
+                  margin: "0 0 6px",
+                  color: "#475569",
+                  fontSize: "1.1rem",
+                  fontWeight: "900",
+                }}
+              >
+                WALK-IN REPORT
+              </h3>
+              <p style={{ margin: 0, fontSize: "0.85rem", fontWeight: "600" }}>
+                No visual evidence provided.
+              </p>
+            </div>
           )}
         </div>
 
-        <div className="detail-info-section">
-          <p style={{ marginBottom: "10px" }}>
-            <strong>INCIDENT ADDRESS:</strong>{" "}
+        {/* Info Blocks */}
+        <div className="detail-info-section" style={{ marginBottom: "15px" }}>
+          <p>
+            <strong>ADDRESS:</strong>{" "}
             {[
               report.purok_sitio,
               report.barangays?.name,
@@ -1036,133 +1018,36 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               "Isabela",
             ]
               .filter(Boolean)
-              .join(", ") || "Address not specified"}
+              .join(", ") || "N/A"}
           </p>
-          <p style={{ marginBottom: "10px" }}>
-            <strong>{t.descriptionLabel}</strong>{" "}
-            {report.description || t.noDescProvided}
+          <p style={{ marginTop: "10px" }}>
+            <strong>DESC:</strong> {report.description || "N/A"}
           </p>
-          <p style={{ marginBottom: "10px" }}>
-            <strong>{t.landmarkLabel}</strong> {report.landmark || "N/A"}
+          <p style={{ marginTop: "10px" }}>
+            <strong>LANDMARK:</strong> {report.landmark || "N/A"}
           </p>
-
           {report.resolution_time && (
-            <div
+            <p
               style={{
                 marginTop: "12px",
                 paddingTop: "12px",
                 borderTop: "1px dashed #cbd5e1",
               }}
             >
-              <p style={{ margin: 0 }}>
-                <strong>RESOLUTION TIME:</strong>{" "}
-                <span style={{ color: "#16a34a", fontWeight: "900" }}>
-                  {report.resolution_time}
-                </span>
-              </p>
-            </div>
+              <strong>RESOLUTION TIME:</strong>{" "}
+              <span style={{ color: "#16a34a" }}>{report.resolution_time}</span>
+            </p>
           )}
         </div>
 
-        <div
-          className="detail-coords-section"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "10px",
-            marginTop: "15px",
-          }}
-        >
-          {adminRemarks && (
-            <div
-              style={{
-                background: "#fffbeb",
-                padding: "16px",
-                borderRadius: "12px",
-                boxShadow: "0 4px 15px rgba(0,0,0,0.03)",
-                marginBottom: "5px",
-                border: "1px solid #fde68a",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  marginBottom: "8px",
-                }}
-              >
-                <MessageSquare size={20} color="#b45309" />
-                <h3
-                  style={{
-                    margin: 0,
-                    fontSize: "0.95rem",
-                    fontWeight: "900",
-                    color: "#b45309",
-                    letterSpacing: "0.5px",
-                  }}
-                >
-                  {t.adminRemarks}
-                </h3>
-              </div>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "0.9rem",
-                  color: "#78350f",
-                  fontWeight: "600",
-                  lineHeight: "1.4",
-                }}
-              >
-                {adminRemarks}
-              </p>
-            </div>
-          )}
-
-          <button
-            onClick={() => setShowMap(true)}
-            style={{
-              width: "100%",
-              padding: "16px",
-              backgroundColor: "#1b0b8c",
-              color: "#ffffff",
-              border: "none",
-              borderRadius: "50px",
-              fontWeight: "900",
-              fontSize: "1rem",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: "10px",
-              cursor: "pointer",
-              boxShadow: "0 6px 15px rgba(27, 11, 140, 0.2)",
-              transition: "transform 0.1s",
-            }}
-            onMouseDown={(e) =>
-              (e.currentTarget.style.transform = "scale(0.98)")
-            }
-            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-          >
-            <MapPin size={22} /> {t.viewLocationMap}
-          </button>
-
-          <div className="coords-row" style={{ marginTop: "10px" }}>
-            <span>
-              <strong>LO:</strong> {report.longitude || "N/A"}
-            </span>
-            <span>
-              <strong>LA:</strong> {report.latitude || "N/A"}
-            </span>
-          </div>
-
+        {adminRemarks && (
           <div
             style={{
-              background: "#ffffff",
+              background: "#fffbeb",
               padding: "16px",
               borderRadius: "12px",
-              boxShadow: "0 4px 15px rgba(0,0,0,0.03)",
-              marginTop: "10px",
-              border: "1px solid #e2e8f0",
+              border: "1px solid #fde68a",
+              marginBottom: "15px",
             }}
           >
             <div
@@ -1170,157 +1055,204 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                marginBottom: "4px",
+                marginBottom: "8px",
+                color: "#b45309",
+                fontWeight: "900",
               }}
             >
-              <Users size={20} color="#1b0b8c" />
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: "0.95rem",
-                  fontWeight: "900",
-                  color: "#1b0b8c",
-                  letterSpacing: "0.5px",
-                }}
-              >
-                ASSIGNED TEAM
-              </h3>
+              <MessageSquare size={20} /> ADMIN REMARKS
             </div>
-
-            {loadingAssignmentDetails ? (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "0.85rem",
-                  color: "#64748b",
-                  fontStyle: "italic",
-                }}
-              >
-                Loading team details...
-              </p>
-            ) : (
-              <>
-                {/* 🌟 NEW: Highlighted Assigned Team Name */}
-                <p
-                  style={{
-                    margin: "0 0 12px 0",
-                    fontSize: "1.1rem",
-                    color: "#15803d",
-                    fontWeight: "900",
-                  }}
-                >
-                  {assignedTeamName}
-                </p>
-                <p
-                  style={{
-                    margin: "0 0 6px 0",
-                    fontSize: "0.75rem",
-                    color: "#64748b",
-                    fontWeight: "800",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Team Members
-                </p>
-                {companions.length > 0 ? (
-                  <ul
-                    style={{
-                      margin: 0,
-                      paddingLeft: "20px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                    }}
-                  >
-                    {companions.map((comp, idx) => (
-                      <li
-                        key={idx}
-                        style={{
-                          fontSize: "0.9rem",
-                          color: "#334155",
-                          fontWeight: "700",
-                        }}
-                      >
-                        {comp}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.85rem",
-                      color: "#64748b",
-                      fontWeight: "600",
-                    }}
-                  >
-                    No members found.
-                  </p>
-                )}
-              </>
-            )}
+            <p style={{ margin: 0, color: "#78350f", fontWeight: "600" }}>
+              {adminRemarks}
+            </p>
           </div>
+        )}
+
+        {report.delay_reason && (
+          <div
+            style={{
+              background: "#fef2f2",
+              padding: "16px",
+              borderRadius: "12px",
+              border: "1px solid #fecaca",
+              marginBottom: "15px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                marginBottom: "8px",
+                color: "#dc2626",
+                fontWeight: "900",
+              }}
+            >
+              <AlertCircle size={20} /> DELAY NOTICE
+            </div>
+            <p style={{ margin: 0, color: "#991b1b", fontWeight: "600" }}>
+              {report.delay_reason}
+            </p>
+          </div>
+        )}
+
+        <button
+          onClick={() => setShowMap(true)}
+          style={{
+            width: "100%",
+            padding: "16px",
+            background: "#1b0b8c",
+            color: "#fff",
+            border: "none",
+            borderRadius: "50px",
+            fontWeight: "900",
+            display: "flex",
+            justifyContent: "center",
+            gap: "10px",
+            marginBottom: "10px",
+          }}
+        >
+          <MapPin size={22} /> VIEW MAP
+        </button>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: "0.85rem",
+            color: "#64748b",
+            padding: "0 10px 15px",
+          }}
+        >
+          <span>
+            <strong>LO:</strong> {report.longitude}
+          </span>
+          <span>
+            <strong>LA:</strong> {report.latitude}
+          </span>
+        </div>
+
+        <div
+          style={{
+            background: "#fff",
+            padding: "16px",
+            borderRadius: "12px",
+            border: "1px solid #e2e8f0",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              marginBottom: "12px",
+              color: "#1b0b8c",
+              fontWeight: "900",
+            }}
+          >
+            <Users size={20} /> ASSIGNED TEAM
+          </div>
+          <p
+            style={{
+              margin: "0 0 6px",
+              color: "#15803d",
+              fontWeight: "900",
+              fontSize: "1.1rem",
+            }}
+          >
+            {assignedTeamName}
+          </p>
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: "20px",
+              color: "#334155",
+              fontWeight: "700",
+            }}
+          >
+            {companions.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
         </div>
       </div>
 
+      {/* Action Bar */}
       <div
-        className="status-action-bar"
         style={{
-          paddingBottom: "env(safe-area-inset-bottom)",
-          touchAction: "none",
-          display: "flex",
+          padding: "15px",
+          background: "#fff",
+          borderTop: "1px solid #e2e8f0",
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
         {activeStatus === "ON QUEUE" ? (
+          <>
+            {hasOtherInProgress && !isCheckingActive && (
+              <p
+                style={{
+                  color: "#ef4444",
+                  fontSize: "0.75rem",
+                  fontWeight: "900",
+                  textAlign: "center",
+                  margin: "0 0 10px 0",
+                }}
+              >
+                ⚠️ Finish your "In Progress" task first
+              </p>
+            )}
+            <button
+              onClick={handleStartClick}
+              disabled={isSubmitting || hasOtherInProgress || isCheckingActive}
+              style={{
+                width: "100%",
+                background:
+                  hasOtherInProgress || isCheckingActive
+                    ? "#cbd5e1"
+                    : "#16a34a",
+                color:
+                  hasOtherInProgress || isCheckingActive ? "#64748b" : "#fff",
+                padding: "16px",
+                borderRadius: "50px",
+                border: "none",
+                fontWeight: "900",
+                fontSize: "1.05rem",
+                display: "flex",
+                justifyContent: "center",
+                gap: "8px",
+              }}
+            >
+              <PlayCircle size={28} />{" "}
+              {isCheckingActive
+                ? "Checking..."
+                : isSubmitting
+                  ? "Starting..."
+                  : "Start Work"}
+            </button>
+          </>
+        ) : (
           <button
-            onClick={handleStartClick}
-            disabled={isSubmitting}
+            onClick={handleVerifyClick}
+            disabled={isLocked || activeStatus !== "IN PROGRESS"}
             style={{
-              flex: 1,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: "8px",
-              backgroundColor: "#16a34a",
+              width: "100%",
+              background: "#1b0b8c",
               color: "#fff",
               padding: "16px",
               borderRadius: "50px",
               border: "none",
               fontWeight: "900",
               fontSize: "1.05rem",
-              textTransform: "uppercase",
-              boxShadow: "0 4px 15px rgba(22, 163, 74, 0.3)",
-              cursor: isSubmitting ? "not-allowed" : "pointer",
-              opacity: isSubmitting ? 0.7 : 1,
-              transition: "transform 0.1s ease",
-            }}
-            onMouseDown={(e) =>
-              (e.currentTarget.style.transform = "scale(0.98)")
-            }
-            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
-          >
-            <PlayCircle size={28} />
-            <span>{isSubmitting ? "Starting..." : "Start Work"}</span>
-          </button>
-        ) : (
-          <button
-            className={`status-icon-btn btn-resolved ${
-              isLocked ? "active active-resolved" : ""
-            }`}
-            onClick={handleVerifyClick}
-            disabled={isLocked || activeStatus !== "IN PROGRESS"}
-            style={{
-              flex: 1,
               display: "flex",
               justifyContent: "center",
               gap: "8px",
-              ...(isLocked || activeStatus !== "IN PROGRESS"
-                ? { opacity: 0.5, cursor: "not-allowed" }
-                : {}),
+              opacity: isLocked || activeStatus !== "IN PROGRESS" ? 0.5 : 1,
             }}
           >
-            <CheckCircle size={28} className="status-icon" />
-            <span style={{ fontSize: "1.05rem" }}>Submit for Verification</span>
+            <CheckCircle size={28} /> Submit for Verification
           </button>
         )}
       </div>

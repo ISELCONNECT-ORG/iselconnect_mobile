@@ -15,6 +15,8 @@ import {
   Star,
   Clock,
   Image as ImageIcon,
+  AlertCircle,
+  MessageSquare,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -44,8 +46,9 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const [timelineData, setTimelineData] = useState(null);
   const [assignedLinemen, setAssignedLinemen] = useState([]);
 
-  // 🌟 NEW: State to hold the fetched team name
   const [assignedTeamName, setAssignedTeamName] = useState("Unassigned");
+  // 🌟 FIXED: Added the missing adminRemarks state
+  const [adminRemarks, setAdminRemarks] = useState("");
 
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -90,12 +93,13 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
 
   useEffect(() => {
     const fetchAssignmentDetails = async () => {
-      // 🌟 UPDATED: Added lineman_id and users(id) to fetch the team
+      // 🌟 FIXED: Added admin_remarks to the fetch query
       const { data, error } = await supabase
         .from("assignments")
         .select(
           `
           lineman_id,
+          admin_remarks,
           assigned_at, 
           inprogress_at, 
           completion_at, 
@@ -108,6 +112,11 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
       if (data && !error && data.length > 0) {
         setTimelineData(data[0]);
 
+        // 🌟 FIXED: Set the admin remarks if they exist
+        if (data[0].admin_remarks) {
+          setAdminRemarks(data[0].admin_remarks);
+        }
+
         const linemenNames = data
           .map((a) =>
             `${a.users?.first_name || ""} ${a.users?.last_name || ""}`.trim(),
@@ -116,7 +125,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
 
         setAssignedLinemen([...new Set(linemenNames)]);
 
-        // 🌟 NEW: Fetch the team name based on the assigned lineman
         const sampleUserId = data[0].lineman_id || data[0].users?.id;
         let foundTeamName = "Assigned Team";
 
@@ -1282,6 +1290,100 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 </p>
               )}
 
+              {/* 🌟 FIXED: Display Admin Remarks here if they exist */}
+              {adminRemarks && (
+                <div
+                  style={{
+                    background: "#fffbeb",
+                    padding: "16px",
+                    borderRadius: "12px",
+                    boxShadow: "0 4px 15px rgba(0,0,0,0.03)",
+                    marginBottom: "15px",
+                    border: "1px solid #fde68a",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <MessageSquare size={20} color="#b45309" />
+                    <h3
+                      style={{
+                        margin: 0,
+                        fontSize: "0.95rem",
+                        fontWeight: "900",
+                        color: "#b45309",
+                        letterSpacing: "0.5px",
+                      }}
+                    >
+                      {t.adminRemarks}
+                    </h3>
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.9rem",
+                      color: "#78350f",
+                      fontWeight: "600",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    {adminRemarks}
+                  </p>
+                </div>
+              )}
+
+              {/* 🌟 NEW: Resident Delay Notice Box */}
+              {report.delay_reason && (
+                <div
+                  style={{
+                    background: "#fef2f2",
+                    padding: "16px",
+                    borderRadius: "12px",
+                    boxShadow: "0 4px 15px rgba(0,0,0,0.03)",
+                    marginBottom: "15px",
+                    border: "1px solid #fecaca",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <AlertCircle size={20} color="#dc2626" />
+                    <h3
+                      style={{
+                        margin: 0,
+                        fontSize: "0.95rem",
+                        fontWeight: "900",
+                        color: "#dc2626",
+                        letterSpacing: "0.5px",
+                      }}
+                    >
+                      DELAY NOTICE
+                    </h3>
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.9rem",
+                      color: "#991b1b",
+                      fontWeight: "600",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    {report.delay_reason}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <p className="rrd-field-label">{t.reportType}</p>
                 <p className="rrd-field-value">{currentReportTypeName}</p>
@@ -1320,7 +1422,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 <>
                   <hr className="rrd-hr" />
                   <div>
-                    {/* 🌟 NEW: Assigned Team and Members Section */}
                     <p
                       className="rrd-field-label"
                       style={{ marginBottom: "4px" }}

@@ -3,6 +3,8 @@ import { supabase } from "../supabaseClient";
 import LinemanReportDetail from "./LinemanReportDetail";
 import { translations } from "../components/translations";
 import { Power, ClipboardList } from "lucide-react";
+import { App } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 
 const priorityWeight = {
   Critical: 4,
@@ -43,13 +45,85 @@ function LinemanReportTab({
 
   const [filterStatus, setFilterStatus] = useState("ALL");
 
+  // 🌟 1. INITIAL LOAD & REAL-TIME AUTO-REFRESH (Using the HomeTab pattern)
   useEffect(() => {
-    fetchDashboardData();
+    // Fetch data immediately on load
+    fetchDashboardData(false);
+
+    // Listen to live changes on the reports table (e.g., status updates)
+    const reportsChannel = supabase
+      .channel("public:lineman_reports_channel")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "reports" },
+        () => {
+          fetchDashboardData(true); // Pull fresh list silently
+        },
+      )
+      .subscribe();
+
+    // Listen to live changes on the assignments table (e.g., new tasks assigned)
+    const assignmentsChannel = supabase
+      .channel("public:lineman_assignments_channel")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "assignments" },
+        (payload) => {
+          // Play alert sound if a new assignment is inserted
+          if (payload.eventType === "INSERT") {
+            try {
+              const sound = new Audio("/alert.mp3");
+              sound
+                .play()
+                .catch((err) => console.warn("Audio playback blocked:", err));
+            } catch (e) {
+              console.warn("Audio init failed:", e);
+            }
+          }
+          fetchDashboardData(true); // Pull fresh list silently
+        },
+      )
+      .subscribe();
+
+    // Cleanup listeners when component unmounts
+    return () => {
+      supabase.removeChannel(reportsChannel);
+      supabase.removeChannel(assignmentsChannel);
+    };
   }, []);
 
-  const fetchDashboardData = async () => {
+  // 🌟 2. AUTO-REFRESH ON APP RESUME (When phone wakes up)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let appListenerHandle = null;
+
+    const setupAppListener = async () => {
+      appListenerHandle = await App.addListener(
+        "appStateChange",
+        ({ isActive }) => {
+          if (isActive) {
+            console.log("📱 App resumed from background! Refreshing queue...");
+            fetchDashboardData(true);
+          }
+        },
+      );
+    };
+
+    setupAppListener();
+
+    return () => {
+      if (appListenerHandle) {
+        appListenerHandle.remove();
+      }
+    };
+  }, []);
+
+  // 🌟 3. FETCH DATA (Accepts silent parameter to prevent screen blinking)
+  const fetchDashboardData = async (isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent) setLoading(true);
+
       const {
         data: { user },
         error: userError,
@@ -82,12 +156,24 @@ function LinemanReportTab({
           if (weightB !== weightA) return weightB - weightA;
           return new Date(b.created_at) - new Date(a.created_at);
         });
+
         setAssignedReports(sortedAssignedReports);
+
+        // Automatically update the open detail screen so it doesn't close on refresh!
+        setSelectedReport((prevSelected) => {
+          if (prevSelected) {
+            const updated = sortedAssignedReports.find(
+              (r) => r.id === prevSelected.id,
+            );
+            return updated || prevSelected;
+          }
+          return null;
+        });
       }
     } catch (error) {
       console.error("Error fetching lineman queue data:", error.message);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
@@ -144,9 +230,9 @@ function LinemanReportTab({
         onBack={() => setSelectedReport(null)}
         onReportUpdated={() => {
           setSelectedReport(null);
-          fetchDashboardData();
+          fetchDashboardData(false);
         }}
-        hasInProgress={inProgressCount > 0} // 🌟 NEW: Passed down so the detail screen knows!
+        hasInProgress={inProgressCount > 0}
       />
     );
   }

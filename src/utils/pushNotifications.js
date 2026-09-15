@@ -3,17 +3,17 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '../supabaseClient';
 
-// 🌟 NEW: A temporary memory to hold the tap data during a cold start
+// A temporary memory to hold the tap data during a cold start
 let pendingTapData = null;
 
-// 🌟 NEW: A function for the Dashboard to grab the missed tap
+// A function for the Dashboard to grab the missed tap
 export const getPendingNotificationData = () => {
   const data = pendingTapData;
   pendingTapData = null; // Clear it so it doesn't trigger twice
   return data;
 };
 
-export const setupPushNotifications = async () => {
+export const setupPushNotifications = async (userId) => {
   if (!Capacitor.isNativePlatform()) {
     console.log("Push notifications are not available on the web browser.");
     return null;
@@ -35,18 +35,30 @@ export const setupPushNotifications = async () => {
     PushNotifications.addListener('registration', async (token) => {
       console.log('🔥 SUCCESS! My Device Token is:', token.value);
       
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      if (userId) {
         const { error } = await supabase
           .from('users')
           .update({ fcm_token: token.value })
-          .eq('id', user.id);
+          .eq('id', userId);
           
         if (error) console.error("Failed to save FCM token to Supabase:", error);
       }
     });
 
-    // 🌟 UPDATED: Save to memory AND broadcast the event
+    // 🌟 UPDATED: Foreground Notification with Sound!
+    PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      console.log('Foreground Push received:', notification);
+      
+      // Attempt to play the sound when the app is actively open
+      try {
+        const alertSound = new Audio('/alert.mp3'); // Looks in your public/ folder
+        alertSound.play().catch(err => console.warn("Audio autoplay blocked by device:", err));
+      } catch (error) {
+        console.error("Failed to play notification sound:", error);
+      }
+    });
+
+    // Save to memory AND broadcast the event when tapped in the background
     PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
       console.log('👆 Notification Tapped!', notification);
       
@@ -55,7 +67,7 @@ export const setupPushNotifications = async () => {
       // Save it in our temporary memory for cold starts!
       pendingTapData = data;
       
-      // Broadcast it just in case the app was already open
+      // Broadcast it just in case the app was already open in the background
       window.dispatchEvent(new CustomEvent('onPushNotificationTap', { detail: data }));
     });
 

@@ -18,24 +18,19 @@ function App() {
   const [appLoading, setAppLoading] = useState(true);
   const [roleFetching, setRoleFetching] = useState(false);
 
-  // NEW: Network Status State
+  // Network Status State
   const [isOnline, setIsOnline] = useState(true);
 
-  const isDevRoute = window.location.pathname === "/dev-lineman-signup";
-
   // --- HEARTBEAT TRACKER EFFECT ---
-  // Keeps the user marked as 'Active' in the database while the app is open
   useEffect(() => {
     let intervalId;
 
     const pingActivity = async () => {
-      // 1. Check if there is a logged-in user
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 2. Update their active status and timestamp
       await supabase
         .from("users")
         .update({
@@ -45,26 +40,20 @@ function App() {
         .eq("id", user.id);
     };
 
-    // Ping immediately when the component loads
     pingActivity();
-
-    // Set up the heartbeat to ping every 5 minutes (300,000 milliseconds)
     intervalId = setInterval(pingActivity, 300000);
 
-    // Cleanup the interval if the user logs out or the component unmounts
     return () => clearInterval(intervalId);
   }, []);
 
   // --- NETWORK TRACKER EFFECT ---
   useEffect(() => {
-    // Check initial status when app opens
     const checkNetworkStatus = async () => {
       const status = await Network.getStatus();
       setIsOnline(status.connected);
     };
     checkNetworkStatus();
 
-    // Listen for changes (e.g., user turns on Airplane Mode)
     let networkListener;
     const setupListener = async () => {
       networkListener = await Network.addListener(
@@ -83,18 +72,18 @@ function App() {
     };
   }, []);
 
-  // 🌟 --- PUSH NOTIFICATIONS EFFECT (FIXED) --- 🌟
+  // 🌟 --- PUSH NOTIFICATIONS EFFECT --- 🌟
   useEffect(() => {
-    // Only run this IF we have a logged-in user session
     if (session && session.user) {
       const initializePush = async () => {
         console.log("User is logged in! Registering for Push Notifications...");
+        // Passed session.user.id so pushNotifications.js receives the ID
         await setupPushNotifications();
       };
 
       initializePush();
     }
-  }, [session]); // The dependency array now watches the 'session' state
+  }, [session]);
 
   // --- AUTHENTICATION EFFECT ---
   useEffect(() => {
@@ -188,10 +177,6 @@ function App() {
       );
     }
 
-    if (isDevRoute) {
-      return <LinemanRegister onBack={() => (window.location.href = "/")} />;
-    }
-
     const isRecoveringFlag =
       localStorage.getItem("recovery_in_progress") === "true";
 
@@ -235,7 +220,6 @@ function App() {
 
   return (
     <>
-      {/* 🔴 OFFLINE OVERLAY - Sits on top of the app when disconnected */}
       {!isOnline && (
         <div
           style={{
@@ -246,8 +230,8 @@ function App() {
             height: "100vh",
             backgroundColor: "rgba(255, 255, 255, 0.95)",
             backdropFilter: "blur(5px)",
-            WebkitBackdropFilter: "blur(5px)", // Safari support
-            zIndex: 999999, // Ensures it covers absolutely everything
+            WebkitBackdropFilter: "blur(5px)",
+            zIndex: 999999,
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
@@ -275,7 +259,6 @@ function App() {
         </div>
       )}
 
-      {/* Main App Content */}
       {renderContent()}
     </>
   );

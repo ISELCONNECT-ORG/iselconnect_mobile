@@ -773,7 +773,7 @@ function SignUp({ onBack }) {
                 <input
                   type="text"
                   name="middleName"
-                  placeholder="Middle Name"
+                  placeholder="Middle Name (Optional)"
                   value={formData.middleName}
                   onChange={handleInputChange}
                   className="auth-input"

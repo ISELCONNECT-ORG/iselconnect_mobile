@@ -294,7 +294,6 @@ function SignUp({ onBack }) {
       if (!formData.idNumber.trim())
         throw new Error("Please provide your ID Number.");
 
-      // 🌟 NEW: Pre-check if email already exists in the public users table
       const { data: existingEmail } = await supabase
         .from("users")
         .select("id")
@@ -307,7 +306,6 @@ function SignUp({ onBack }) {
         );
       }
 
-      // Proceed with normal auth signup
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email.trim(),
         password: formData.password,
@@ -315,7 +313,6 @@ function SignUp({ onBack }) {
 
       if (authError) throw authError;
 
-      // 🌟 NEW: Supabase specific check for silent duplicate emails (enumeration disabled)
       if (authData?.user?.identities && authData.user.identities.length === 0) {
         throw new Error(
           "This email is already registered. Please log in instead.",
@@ -436,8 +433,9 @@ function SignUp({ onBack }) {
   };
 
   const handleBackNavigation = () => {
-    if (signupStep === "otp") return;
-    if (signupStep === "form") setSignupStep("selfie-scan");
+    // 🌟 FIXED: Allows navigation back from the OTP step
+    if (signupStep === "otp") setSignupStep("form");
+    else if (signupStep === "form") setSignupStep("selfie-scan");
     else if (signupStep === "selfie-scan") setSignupStep("id-scan");
     else if (signupStep === "id-scan") setSignupStep("id-select");
     else if (signupStep === "id-select") setSignupStep("privacy");
@@ -530,19 +528,18 @@ function SignUp({ onBack }) {
         )}
 
       <div className="auth-top-section auth-bg-photo">
-        {signupStep !== "otp" && (
-          <button
-            className="auth-back-btn"
-            type="button"
-            style={{
-              zIndex: 10,
-              animation: "contentFade 0.3s ease-out",
-            }}
-            onClick={handleBackNavigation}
-          >
-            <ChevronLeft size={24} strokeWidth={2.5} color="#1e1b4b" />
-          </button>
-        )}
+        {/* 🌟 FIXED: Removed conditional wrapper so button displays on ALL steps */}
+        <button
+          className="auth-back-btn"
+          type="button"
+          style={{
+            zIndex: 10,
+            animation: "contentFade 0.3s ease-out",
+          }}
+          onClick={handleBackNavigation}
+        >
+          <ChevronLeft size={24} strokeWidth={2.5} color="#1e1b4b" />
+        </button>
         <img src={logo} alt="ISELCONNECT Logo" className="auth-logo-img" />
       </div>
 

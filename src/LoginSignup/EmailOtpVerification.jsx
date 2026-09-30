@@ -9,12 +9,10 @@ export default function EmailOtpVerification({
   onVerifyOTP,
   loading,
 }) {
-  // 🌟 NEW: States for the resend timer and status messages
   const [resendTimer, setResendTimer] = useState(60);
   const [isResending, setIsResending] = useState(false);
   const [resendStatus, setResendStatus] = useState("");
 
-  // 🌟 NEW: Countdown timer effect
   useEffect(() => {
     if (resendTimer > 0) {
       const timer = setInterval(() => {
@@ -24,7 +22,6 @@ export default function EmailOtpVerification({
     }
   }, [resendTimer]);
 
-  // 🌟 NEW: Handle the resend request to Supabase
   const handleResendCode = async () => {
     if (resendTimer > 0 || isResending) return;
 
@@ -40,7 +37,7 @@ export default function EmailOtpVerification({
       if (error) throw error;
 
       setResendStatus("New code sent successfully!");
-      setResendTimer(60); // Restart the 60-second cooldown
+      setResendTimer(60);
     } catch (error) {
       setResendStatus(error.message || "Failed to resend code.");
     } finally {
@@ -113,7 +110,6 @@ export default function EmailOtpVerification({
           />
         </div>
 
-        {/* 🌟 NEW: Resend Code Section */}
         <div style={{ textAlign: "center", width: "100%" }}>
           {resendStatus && (
             <p

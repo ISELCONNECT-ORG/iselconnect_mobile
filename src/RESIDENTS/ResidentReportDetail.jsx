@@ -47,7 +47,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   const [assignedLinemen, setAssignedLinemen] = useState([]);
 
   const [assignedTeamName, setAssignedTeamName] = useState("Unassigned");
-  // 🌟 FIXED: Added the missing adminRemarks state
   const [adminRemarks, setAdminRemarks] = useState("");
 
   const mapContainerRef = useRef(null);
@@ -71,29 +70,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
   });
 
   useEffect(() => {
-    const resetScroll = () => {
-      window.scrollTo(0, 0);
-      if (layoutRef.current) {
-        layoutRef.current.scrollIntoView({
-          behavior: "instant",
-          block: "start",
-        });
-      }
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTop = 0;
-      }
-      const parentTab = document.querySelector(".rrd-scrollable");
-      if (parentTab) parentTab.scrollTop = 0;
-    };
-
-    resetScroll();
-    const timer = setTimeout(resetScroll, 50);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
     const fetchAssignmentDetails = async () => {
-      // 🌟 FIXED: Added admin_remarks to the fetch query
       const { data, error } = await supabase
         .from("assignments")
         .select(
@@ -112,7 +89,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
       if (data && !error && data.length > 0) {
         setTimelineData(data[0]);
 
-        // 🌟 FIXED: Set the admin remarks if they exist
         if (data[0].admin_remarks) {
           setAdminRemarks(data[0].admin_remarks);
         }
@@ -711,11 +687,16 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
       ref={layoutRef}
       className="detail-layout page-transition"
       style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
         overscrollBehavior: "none",
         backgroundColor: "#f8fafc",
         display: "flex",
         flexDirection: "column",
-        height: "100dvh",
       }}
     >
       <style>{`
@@ -890,34 +871,62 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
         </div>
       )}
 
+      {/* 🌟 FIXED HEADER (Moved out of the scrollable body) */}
+      <div
+        style={{
+          flexShrink: 0,
+          padding: "calc(20px + env(safe-area-inset-top)) 16px 16px",
+          background: "#f8fafc",
+          zIndex: 50,
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          borderBottom: "1px solid #e2e8f0",
+        }}
+      >
+        <button
+          onClick={() => {
+            isEditing ? handleCancelEdit() : onBack();
+          }}
+          className="back-btn"
+          style={{ flexShrink: 0 }}
+        >
+          <ChevronLeft size={28} strokeWidth={3} />
+        </button>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: "1.3rem",
+            fontWeight: "900",
+            color: "#1b0b8c",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+          }}
+        >
+          {isEditing
+            ? t.editReportTitle
+            : report.report_types?.name || t.reportDetailsTitle}
+        </h2>
+      </div>
+
       {/* Main Scrollable Content */}
       <div
         ref={scrollContainerRef}
         className="detail-scrollable-content rrd-scrollable"
-        style={{ flex: 1, overflowY: "auto" }}
+        style={{ flex: 1, overflowY: "auto", padding: "16px 16px 24px 16px" }}
       >
-        <div className="detail-header">
-          <button
-            onClick={() => {
-              isEditing ? handleCancelEdit() : onBack();
-            }}
-            className="back-btn"
-          >
-            <ChevronLeft size={28} strokeWidth={3} />
-          </button>
-          <h2 style={{ textTransform: "uppercase", letterSpacing: "0.5px" }}>
-            {isEditing
-              ? t.editReportTitle
-              : report.report_types?.name || t.reportDetailsTitle}
-          </h2>
-        </div>
-
         <div className="detail-photo-section rrd-mb-20">
           {report.photo_url ? (
             <img
               src={report.photo_url}
               alt="Report issue"
               className="detail-photo"
+              style={{
+                width: "100%",
+                height: "220px",
+                objectFit: "cover",
+                borderRadius: "16px",
+              }}
             />
           ) : (
             <div className="no-photo">{t.noOriginalPhoto}</div>
@@ -1290,7 +1299,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 </p>
               )}
 
-              {/* 🌟 FIXED: Display Admin Remarks here if they exist */}
               {adminRemarks && (
                 <div
                   style={{
@@ -1337,7 +1345,6 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
                 </div>
               )}
 
-              {/* 🌟 NEW: Resident Delay Notice Box */}
               {report.delay_reason && (
                 <div
                   style={{
@@ -1497,17 +1504,16 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
         </div>
       </div>
 
+      {/* 🌟 FIXED FOOTER */}
       <div
         style={{
-          position: "sticky",
-          bottom: 0,
+          flexShrink: 0,
           padding: "15px 20px calc(15px + env(safe-area-inset-bottom)) 20px",
           backgroundColor: "#ffffff",
           borderTop: "1px solid #e2e8f0",
           display: "flex",
           gap: "12px",
           boxShadow: "0 -4px 15px rgba(0,0,0,0.03)",
-          zIndex: 100,
         }}
       >
         {isEditing ? (

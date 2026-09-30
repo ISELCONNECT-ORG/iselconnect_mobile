@@ -34,12 +34,14 @@ const FullScreenWrapper = ({ title, onBack, isDark, children }) => (
       position: "fixed",
       top: 0,
       left: 0,
-      width: "100vw",
-      height: "100vh",
+      right: 0,
+      bottom: 0,
       background: isDark ? "#000" : "#f8fafc",
       zIndex: 99999,
       display: "flex",
       flexDirection: "column",
+      overflow: "hidden",
+      overscrollBehavior: "none",
     }}
   >
     <div
@@ -48,6 +50,7 @@ const FullScreenWrapper = ({ title, onBack, isDark, children }) => (
         alignItems: "center",
         justifyContent: "space-between",
         padding: "20px 15px",
+        paddingTop: "calc(20px + env(safe-area-inset-top))",
         background: isDark ? "#000" : "#1b0b8c",
         flexShrink: 0,
       }}
@@ -118,12 +121,41 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     activeStatus === "RESOLVED" || activeStatus === "ADMIN VERIFIED";
   const isLocked = isResolved || activeStatus === "PENDING VERIFICATION";
 
-  // Hide the global navigation bar when this detail screen is open
+  // Hide the global navigation bar and lock background scroll while this screen is open
   useEffect(() => {
     const navBar = document.querySelector(".bottom-nav-wrapper");
     if (navBar) navBar.style.display = "none";
+    const html = document.documentElement;
+    const body = document.body;
+    const scrollY = window.scrollY;
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      htmlOverscroll: html.style.overscrollBehavior,
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyWidth: body.style.width,
+      bodyOverscroll: body.style.overscrollBehavior,
+    };
+
+    html.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+    body.style.overflow = "hidden";
+    body.style.overscrollBehavior = "none";
+    body.style.position = "fixed"; // iOS-safe lock
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+
     return () => {
       if (navBar) navBar.style.display = "";
+      html.style.overflow = prev.htmlOverflow;
+      html.style.overscrollBehavior = prev.htmlOverscroll;
+      body.style.overflow = prev.bodyOverflow;
+      body.style.overscrollBehavior = prev.bodyOverscroll;
+      body.style.position = prev.bodyPosition;
+      body.style.top = prev.bodyTop;
+      body.style.width = prev.bodyWidth;
+      window.scrollTo(0, scrollY);
     };
   }, []);
 
@@ -473,7 +505,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     }
   };
 
-  // 🌟 FIXED: Implemented precise column matching (residents_id) and protected error boundary
   const handleDelaySubmit = async () => {
     if (!delayReason.trim()) return;
     setIsSubmittingDelay(true);
@@ -493,7 +524,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         .eq("id", report.id)
         .single();
 
-      // 3. Post to notifications using residents_id (Matches schema exactly)
+      // 3. Post to notifications using residents_id
       if (repData?.residents_id) {
         const { error: notifError } = await supabase
           .from("notifications")
@@ -532,11 +563,13 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   if (showMap)
     return (
       <FullScreenWrapper title={t.locationMap} onBack={() => setShowMap(false)}>
-        <div style={{ flex: 1, width: "100%", position: "relative" }}>
+        <div
+          style={{ flex: 1, minHeight: 0, width: "100%", position: "relative" }}
+        >
           <div
             style={{
               position: "absolute",
-              bottom: "30px",
+              bottom: "calc(30px + env(safe-area-inset-bottom))",
               left: "50%",
               transform: "translateX(-50%)",
               zIndex: 1000,
@@ -597,6 +630,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         <div
           style={{
             flex: 1,
+            minHeight: 0,
             position: "relative",
             width: "100%",
             background: "#111",
@@ -612,8 +646,10 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         </div>
         <div
           style={{
+            flexShrink: 0,
             background: "#e2e8f0",
-            padding: "20px 15px 40px",
+            padding: "20px 15px",
+            paddingBottom: "calc(30px + env(safe-area-inset-bottom))",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -624,11 +660,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             {t.captureTheFix}
           </p>
           <button
-            onClick={() => {
-              setEvidencePhoto(webcamRef.current.getScreenshot());
-              setIsCameraOpen(false);
-              setIsRemarksOpen(true);
-            }}
+            onClick={captureEvidence}
             style={{
               width: 70,
               height: 70,
@@ -654,9 +686,13 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         <div
           style={{
             flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
             display: "flex",
             flexDirection: "column",
             padding: "20px",
+            paddingBottom: "calc(20px + env(safe-area-inset-bottom))",
           }}
         >
           <img
@@ -665,6 +701,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             style={{
               width: "100%",
               height: "220px",
+              flexShrink: 0,
               objectFit: "cover",
               borderRadius: "15px",
               marginBottom: "20px",
@@ -678,6 +715,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             style={{
               width: "100%",
               height: "140px",
+              flexShrink: 0,
               padding: "15px",
               borderRadius: "15px",
               border: "1px solid #cbd5e1",
@@ -695,6 +733,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             disabled={isSubmitting || !resolutionRemarks.trim()}
             style={{
               marginTop: "auto",
+              flexShrink: 0,
               background: "#1b0b8c",
               color: "#fff",
               padding: "18px",
@@ -715,6 +754,16 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     <div
       className="detail-layout page-transition"
       style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        overscrollBehavior: "none",
         backgroundColor: "#f8fafc",
         animation: "containerTransformExp 0.4s forwards",
       }}
@@ -906,66 +955,67 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         </div>
       )}
 
+      {/* 🌟 FIXED HEADER (Moved out of the scrollable body) */}
       <div
         style={{
-          padding: "16px 16px 180px 16px",
-          overflowY: "auto",
-          height: "100%",
+          flexShrink: 0,
+          padding: "calc(20px + env(safe-area-inset-top)) 16px 16px",
+          background: "#f8fafc", // Solid background color
+          zIndex: 50,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          borderBottom: "1px solid #e2e8f0",
         }}
       >
-        {/* Header */}
-        <div
-          style={{
-            position: "sticky",
-            top: 0,
-            margin: "-16px -16px 20px",
-            padding: "calc(20px + env(safe-area-inset-top)) 16px 16px",
-            background: "rgba(248, 250, 252, 0.92)",
-            backdropFilter: "blur(12px)",
-            zIndex: 50,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            borderBottom: "1px solid #e2e8f0",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <button
-              onClick={onBack}
-              className="back-btn"
-              style={{ flexShrink: 0 }}
-            >
-              <ChevronLeft size={28} strokeWidth={3} />
-            </button>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "1.3rem",
-                fontWeight: "900",
-                color: "#1b0b8c",
-                textTransform: "uppercase",
-              }}
-            >
-              {report.report_types?.name}
-            </h2>
-          </div>
-          {activeStatus === "IN PROGRESS" && (
-            <button
-              onClick={() => setShowDelayModal(true)}
-              style={{
-                background: "#fee2e2",
-                border: "none",
-                padding: "10px",
-                borderRadius: "50%",
-                color: "#ef4444",
-                flexShrink: 0,
-              }}
-            >
-              <Clock size={22} strokeWidth={3} />
-            </button>
-          )}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <button
+            onClick={onBack}
+            className="back-btn"
+            style={{ flexShrink: 0 }}
+          >
+            <ChevronLeft size={28} strokeWidth={3} />
+          </button>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "1.3rem",
+              fontWeight: "900",
+              color: "#1b0b8c",
+              textTransform: "uppercase",
+            }}
+          >
+            {report.report_types?.name}
+          </h2>
         </div>
+        {activeStatus === "IN PROGRESS" && (
+          <button
+            onClick={() => setShowDelayModal(true)}
+            style={{
+              background: "#fee2e2",
+              border: "none",
+              padding: "10px",
+              borderRadius: "50%",
+              color: "#ef4444",
+              flexShrink: 0,
+            }}
+          >
+            <Clock size={22} strokeWidth={3} />
+          </button>
+        )}
+      </div>
 
+      {/* Scrollable body */}
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
+          padding: "16px 16px 24px 16px",
+        }}
+      >
         {/* Lock Banner */}
         {isLocked && (
           <div
@@ -1207,16 +1257,15 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         </div>
       </div>
 
-      {/* Action Bar */}
+      {/* Action Bar (normal flex child, pinned to the bottom) */}
       <div
         style={{
+          flexShrink: 0,
+          touchAction: "none",
           padding: "15px",
+          paddingBottom: "calc(15px + env(safe-area-inset-bottom))",
           background: "#fff",
           borderTop: "1px solid #e2e8f0",
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          width: "100%",
           boxSizing: "border-box",
         }}
       >

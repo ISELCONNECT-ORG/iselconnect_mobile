@@ -6,6 +6,7 @@ import ResidentDashboard from "./RESIDENTS/ResidentDashboard";
 import LinemanDashboard from "./LINEMAN/LinemanDashboard";
 import { useActiveStatus } from "./hooks/useActiveStatus";
 import { Network } from "@capacitor/network";
+import { Keyboard } from "@capacitor/keyboard";
 import { WifiOff } from "lucide-react";
 import { setupPushNotifications } from "./utils/pushNotifications";
 
@@ -20,6 +21,30 @@ function App() {
 
   // Network Status State
   const [isOnline, setIsOnline] = useState(true);
+
+  // 🌟 --- KEYBOARD OVERLAY EFFECT --- 🌟
+  useEffect(() => {
+    // Hide the navigation bar when the keyboard pops up
+    const hideNav = () => {
+      const navBar = document.querySelector(".bottom-nav-wrapper");
+      if (navBar) navBar.style.display = "none";
+    };
+
+    // Show the navigation bar when the keyboard closes
+    const showNav = () => {
+      const navBar = document.querySelector(".bottom-nav-wrapper");
+      if (navBar) navBar.style.display = "";
+    };
+
+    // Listen for Capacitor Keyboard events
+    Keyboard.addListener("keyboardWillShow", hideNav);
+    Keyboard.addListener("keyboardWillHide", showNav);
+
+    // Cleanup listeners when the component unmounts
+    return () => {
+      Keyboard.removeAllListeners();
+    };
+  }, []);
 
   // --- HEARTBEAT TRACKER EFFECT ---
   useEffect(() => {

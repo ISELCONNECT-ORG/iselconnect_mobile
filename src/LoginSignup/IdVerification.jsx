@@ -113,107 +113,125 @@ export default function IdVerification({
     return (
       <div
         style={{
-          flex: 1,
+          position: "absolute", // 🌟 FIXED: Breaks out of scrolling container
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "#000",
+          borderRadius: "0 0 20px 20px", // Optional: matches card corners if needed
           display: "flex",
           flexDirection: "column",
           animation: "contentFade 0.3s ease-out",
+          overflow: "hidden",
+          zIndex: 10, // Ensures it sits above other content in the box
         }}
       >
         <div
           style={{
-            background: "#000",
-            borderRadius: "15px",
-            flex: 1,
-            overflow: "hidden",
-            position: "relative",
-            display: "flex",
-            flexDirection: "column",
+            padding: "15px",
+            color: "#facc15",
+            fontWeight: "bold",
+            textAlign: "center",
+            fontSize: "0.9rem",
+            background: "rgba(15, 23, 42, 0.9)", // Darker, cleaner header
+            zIndex: 2,
           }}
         >
+          Step 1: Align ID inside the frame
+        </div>
+
+        <div style={{ flex: 1, position: "relative" }}>
+          <Webcam
+            audio={false}
+            ref={webcamRef}
+            screenshotFormat="image/jpeg"
+            videoConstraints={{ facingMode: "environment" }}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
           <div
             style={{
-              padding: "10px",
-              color: "#facc15",
-              fontWeight: "bold",
-              textAlign: "center",
-              fontSize: "0.85rem",
-              background: "#1e1b4b",
+              position: "absolute",
+              top: "45%", // Slightly higher than center to leave room for the button
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "85%",
+              height: "220px",
+              border: "3px solid #10b981",
+              borderRadius: "12px",
+              boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.75)", // Darker backdrop to focus the ID
+            }}
+          ></div>
+        </div>
+
+        {isScanning ? (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              background: "rgba(27, 11, 140, 0.95)",
+              color: "#fff",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 10,
             }}
           >
-            Step 1: Align ID inside the frame
-          </div>
-          <div style={{ flex: 1, position: "relative" }}>
-            <Webcam
-              audio={false}
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              videoConstraints={{ facingMode: "environment" }}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            <Loader2
+              size={40}
+              className="animate-spin"
+              style={{ marginBottom: "15px" }}
             />
-            <div
+            <span
               style={{
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-                width: "85%",
-                height: "200px",
-                border: "3px solid #10b981",
-                borderRadius: "10px",
-                boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.6)",
+                fontWeight: "bold",
+                fontSize: "1rem",
+                letterSpacing: "1px",
               }}
-            ></div>
+            >
+              Extracting Data... {scanProgress}%
+            </span>
           </div>
-
-          {isScanning ? (
-            <div
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "40px", // 🌟 FIXED: Absolute position the button over the camera
+              left: "0",
+              right: "0",
+              display: "flex",
+              justifyContent: "center",
+              zIndex: 5,
+            }}
+          >
+            <button
+              onClick={captureIDPhoto}
               style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                background: "rgba(27, 11, 140, 0.9)",
-                color: "#fff",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 10,
+                width: "70px", // Slightly larger button
+                height: "70px",
+                borderRadius: "50%",
+                background: "rgba(255, 255, 255, 0.5)",
+                border: "4px solid #10b981", // Green border to match the target frame
+                cursor: "pointer",
+                backdropFilter: "blur(4px)",
               }}
             >
-              <Loader2
-                size={40}
-                className="animate-spin"
-                style={{ marginBottom: "15px" }}
-              />
-              <span style={{ fontWeight: "bold", fontSize: "1rem" }}>
-                Extracting Data... {scanProgress}%
-              </span>
-            </div>
-          ) : (
-            <div
-              style={{
-                padding: "15px",
-                background: "#111",
-                display: "flex",
-                justifyContent: "center",
-              }}
-            >
-              <button
-                onClick={captureIDPhoto}
+              <div
                 style={{
-                  width: "60px",
-                  height: "60px",
+                  width: "50px",
+                  height: "50px",
                   borderRadius: "50%",
-                  background: "#fff",
-                  border: "4px solid #cbd5e1",
-                  cursor: "pointer",
+                  background: "#ffffff",
+                  margin: "auto",
                 }}
-              ></button>
-            </div>
-          )}
-        </div>
+              />
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -222,79 +240,91 @@ export default function IdVerification({
     return (
       <div
         style={{
-          flex: 1,
+          position: "absolute", // 🌟 FIXED: Breaks out of scrolling container
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "#000",
+          borderRadius: "0 0 20px 20px",
           display: "flex",
           flexDirection: "column",
           animation: "contentFade 0.3s ease-out",
+          overflow: "hidden",
+          zIndex: 10,
         }}
       >
         <div
           style={{
-            background: "#000",
-            borderRadius: "15px",
-            flex: 1,
-            overflow: "hidden",
-            position: "relative",
-            display: "flex",
-            flexDirection: "column",
+            padding: "15px",
+            color: "#4ade80",
+            fontWeight: "bold",
+            textAlign: "center",
+            fontSize: "0.9rem",
+            background: "rgba(15, 23, 42, 0.9)",
+            zIndex: 2,
           }}
         >
+          Step 2: Position face inside the circle
+        </div>
+
+        <div style={{ flex: 1, position: "relative" }}>
+          <Webcam
+            audio={false}
+            ref={webcamRef}
+            screenshotFormat="image/jpeg"
+            videoConstraints={{ facingMode: "user" }}
+            mirrored={true}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
           <div
             style={{
-              padding: "10px",
-              color: "#4ade80",
-              fontWeight: "bold",
-              textAlign: "center",
-              fontSize: "0.85rem",
-              background: "#1e1b4b",
+              position: "absolute",
+              top: "45%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "260px", // Slightly larger circle for easier framing
+              height: "260px",
+              border: "3px solid #4ade80",
+              borderRadius: "50%",
+              boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.75)",
+            }}
+          ></div>
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            bottom: "40px", // 🌟 FIXED: Absolute position over camera
+            left: "0",
+            right: "0",
+            display: "flex",
+            justifyContent: "center",
+            zIndex: 5,
+          }}
+        >
+          <button
+            onClick={captureSelfiePhoto}
+            style={{
+              width: "70px",
+              height: "70px",
+              borderRadius: "50%",
+              background: "rgba(255, 255, 255, 0.5)",
+              border: "4px solid #4ade80",
+              cursor: "pointer",
+              backdropFilter: "blur(4px)",
             }}
           >
-            Step 2: Position face inside the circle
-          </div>
-          <div style={{ flex: 1, position: "relative" }}>
-            <Webcam
-              audio={false}
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              videoConstraints={{ facingMode: "user" }}
-              mirrored={true}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
             <div
               style={{
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-                width: "220px",
-                height: "220px",
-                border: "3px solid #4ade80",
+                width: "50px",
+                height: "50px",
                 borderRadius: "50%",
-                boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.7)",
+                background: "#ffffff",
+                margin: "auto",
               }}
-            ></div>
-          </div>
-
-          <div
-            style={{
-              padding: "15px",
-              background: "#111",
-              display: "flex",
-              justifyContent: "center",
-            }}
-          >
-            <button
-              onClick={captureSelfiePhoto}
-              style={{
-                width: "60px",
-                height: "60px",
-                borderRadius: "50%",
-                background: "#fff",
-                border: "4px solid #4ade80",
-                cursor: "pointer",
-              }}
-            ></button>
-          </div>
+            />
+          </button>
         </div>
       </div>
     );

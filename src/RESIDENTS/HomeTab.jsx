@@ -3,7 +3,7 @@ import { supabase } from "../supabaseClient";
 import ResidentReportDetail from "./ResidentReportDetail";
 import HotlinesTab from "./HotlinesTab";
 import SatisfactionSurveyModal from "./SatisfactionSurveyModal";
-import { Clock, Wrench, CheckCircle, XCircle } from "lucide-react";
+import { Clock, Wrench, CheckCircle, ClipboardList } from "lucide-react";
 import "../Resident.css";
 
 function HomeTab() {
@@ -56,7 +56,7 @@ function HomeTab() {
         setUserName(`${userData.first_name} ${userData.last_name}`);
       }
 
-      // 🌟 FETCHING NEW COLUMNS: resolution_time, purok_sitio, barangays, municipalities
+      // FETCHING COLUMNS
       const { data: reportsData, error: reportsError } = await supabase
         .from("reports")
         .select(
@@ -107,6 +107,7 @@ function HomeTab() {
       return "#16a34a";
     if (status === "IN PROGRESS" || status === "PENDING VERIFICATION")
       return "#0ea5e9";
+    if (status === "ON QUEUE") return "#9333ea"; // Purple for On Queue
     if (status === "REJECTED") return "#dc2626";
     return "#ca8a04";
   };
@@ -154,6 +155,13 @@ function HomeTab() {
         text: "#0284c7",
       };
     }
+    if (status === "ON QUEUE") {
+      return {
+        bg: "rgba(250, 245, 255, 0.8)",
+        border: "#d8b4fe",
+        text: "#7e22ce", // Purple styling for On Queue
+      };
+    }
     if (status === "REJECTED") {
       return {
         bg: "rgba(254, 242, 242, 0.8)",
@@ -173,6 +181,12 @@ function HomeTab() {
     return s === "PENDING";
   }).length;
 
+  // 🌟 Added On Queue Count
+  const onQueueCount = userReports.filter((r) => {
+    const s = r.report_statuses?.name?.toUpperCase();
+    return s === "ON QUEUE";
+  }).length;
+
   const inProgressCount = userReports.filter((r) => {
     const s = r.report_statuses?.name?.toUpperCase();
     return s === "IN PROGRESS" || s === "PENDING VERIFICATION";
@@ -183,11 +197,6 @@ function HomeTab() {
     return s === "RESOLVED" || s === "APPROVED" || s === "ADMIN VERIFIED";
   }).length;
 
-  const rejectedCount = userReports.filter((r) => {
-    const s = r.report_statuses?.name?.toUpperCase();
-    return s === "REJECTED";
-  }).length;
-
   const filteredReports = userReports.filter((report) => {
     if (filterStatus === "ALL") return true;
 
@@ -195,6 +204,9 @@ function HomeTab() {
 
     if (filterStatus === "PENDING") {
       return status === "PENDING";
+    }
+    if (filterStatus === "ON QUEUE") {
+      return status === "ON QUEUE";
     }
     if (filterStatus === "IN PROGRESS") {
       return status === "IN PROGRESS" || status === "PENDING VERIFICATION";
@@ -205,9 +217,6 @@ function HomeTab() {
         status === "APPROVED" ||
         status === "ADMIN VERIFIED"
       );
-    }
-    if (filterStatus === "REJECTED") {
-      return status === "REJECTED";
     }
     return status === filterStatus;
   });
@@ -384,6 +393,59 @@ function HomeTab() {
             </p>
           </div>
 
+          {/* 🌟 NEW: ON QUEUE CARD */}
+          <div
+            onClick={() => handleFilterClick("ON QUEUE")}
+            style={{
+              backgroundColor: "rgba(250, 245, 255, 0.7)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              border: "1px solid rgba(216, 180, 254, 0.6)",
+              borderRadius: "20px",
+              padding: "16px 10px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              opacity:
+                filterStatus === "ALL" || filterStatus === "ON QUEUE"
+                  ? 1
+                  : 0.45,
+              transform:
+                filterStatus === "ON QUEUE" ? "scale(1.03)" : "scale(1)",
+              boxShadow: "0 8px 32px 0 rgba(147, 51, 234, 0.08)",
+              transition: "all 0.2s ease",
+            }}
+          >
+            <ClipboardList
+              size={24}
+              color="#9333ea"
+              style={{ marginBottom: "6px" }}
+            />
+            <h3
+              style={{
+                margin: 0,
+                fontSize: "1.7rem",
+                color: "#9333ea",
+                fontWeight: "900",
+                lineHeight: "1",
+              }}
+            >
+              {onQueueCount}
+            </h3>
+            <p
+              style={{
+                margin: "4px 0 0 0",
+                fontSize: "0.7rem",
+                color: "#9333ea",
+                fontWeight: "800",
+              }}
+            >
+              ON QUEUE
+            </p>
+          </div>
+
           {/* IN PROGRESS CARD */}
           <div
             onClick={() => handleFilterClick("IN PROGRESS")}
@@ -483,59 +545,6 @@ function HomeTab() {
               }}
             >
               RESOLVED
-            </p>
-          </div>
-
-          {/* REJECTED CARD */}
-          <div
-            onClick={() => handleFilterClick("REJECTED")}
-            style={{
-              backgroundColor: "rgba(254, 242, 242, 0.7)",
-              backdropFilter: "blur(14px)",
-              WebkitBackdropFilter: "blur(14px)",
-              border: "1px solid rgba(254, 202, 202, 0.6)",
-              borderRadius: "20px",
-              padding: "16px 10px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              opacity:
-                filterStatus === "ALL" || filterStatus === "REJECTED"
-                  ? 1
-                  : 0.45,
-              transform:
-                filterStatus === "REJECTED" ? "scale(1.03)" : "scale(1)",
-              boxShadow: "0 8px 32px 0 rgba(220, 38, 38, 0.08)",
-              transition: "all 0.2s ease",
-            }}
-          >
-            <XCircle
-              size={24}
-              color="#dc2626"
-              style={{ marginBottom: "6px" }}
-            />
-            <h3
-              style={{
-                margin: 0,
-                fontSize: "1.7rem",
-                color: "#dc2626",
-                fontWeight: "900",
-                lineHeight: "1",
-              }}
-            >
-              {rejectedCount}
-            </h3>
-            <p
-              style={{
-                margin: "4px 0 0 0",
-                fontSize: "0.7rem",
-                color: "#dc2626",
-                fontWeight: "800",
-              }}
-            >
-              REJECTED
             </p>
           </div>
         </div>

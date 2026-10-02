@@ -13,10 +13,28 @@ import {
   MapPin,
   CheckCircle,
   AlertCircle,
+  XOctagon,
+  ArrowRight,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
 import { translations } from "../components/translations";
+
+// Haversine formula to calculate distance (in meters) between two coordinates
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3;
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+};
 
 const SearchableDropdown = ({
   options,
@@ -155,6 +173,7 @@ function ReportTab({ isActive }) {
   const [hasPendingReport, setHasPendingReport] = useState(false);
   const [pendingReportDetails, setPendingReportDetails] = useState(null);
   const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(false);
+  const [isBanned, setIsBanned] = useState(false);
 
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
@@ -178,7 +197,6 @@ function ReportTab({ isActive }) {
 
   const webcamRef = useRef(null);
 
-  // Check if selected report type is "Other / Not Specified"
   const selectedReportTypeObj = reportTypes.find(
     (rt) => rt.id.toString() === formData.report_type_id.toString(),
   );
@@ -201,6 +219,18 @@ function ReportTab({ isActive }) {
         } = await supabase.auth.getUser();
 
         if (user && !authError) {
+          const { data: userData, error: userDbError } = await supabase
+            .from("users")
+            .select("ban_status")
+            .eq("id", user.id)
+            .single();
+
+          if (userData && !userDbError && userData.ban_status === true) {
+            setIsBanned(true);
+            setVerificationStatus("approved");
+            return;
+          }
+
           const { data: verData, error: dbError } = await supabase
             .from("user_verifications")
             .select("verification_status")
@@ -213,9 +243,12 @@ function ReportTab({ isActive }) {
             setVerificationStatus("pending");
           }
 
+          // 🌟 UPDATED: Fetched `report_type_id` so we can compare damage types!
           const { data: reportsData, error: reportsError } = await supabase
             .from("reports")
-            .select("id, landmark, created_at, report_statuses(name)")
+            .select(
+              "id, landmark, created_at, latitude, longitude, report_type_id, report_statuses(name)",
+            )
             .eq("residents_id", user.id);
 
           if (!reportsError && reportsData) {
@@ -438,12 +471,6 @@ function ReportTab({ isActive }) {
       return setError("Only verified accounts can submit reports.");
     }
 
-    if (hasPendingReport) {
-      return setError(
-        "You already have a pending report awaiting review. Please wait for it to be processed.",
-      );
-    }
-
     if (!imagePreview) return setError("Please capture a photo of the issue.");
     if (
       !coordinates.lat ||
@@ -458,11 +485,38 @@ function ReportTab({ isActive }) {
     if (!formData.barangay_id) return setError("Please select a Barangay.");
     if (!formData.landmark.trim()) return setError("Please enter a Landmark.");
 
-    // 🌟 REQUIRE DESCRIPTION IF "OTHER / NOT SPECIFIED" IS SELECTED
     if (isOtherSelected && !formData.description.trim()) {
       return setError(
         "Please specify the damage description for Other/Not Specified issues.",
       );
+    }
+
+    // 🌟 THE SUPERVISOR'S RULE: Check distance and report type!
+    if (
+      hasPendingReport &&
+      pendingReportDetails?.latitude &&
+      pendingReportDetails?.longitude
+    ) {
+      const dist = calculateDistance(
+        parseFloat(coordinates.lat),
+        parseFloat(coordinates.lon),
+        parseFloat(pendingReportDetails.latitude),
+        parseFloat(pendingReportDetails.longitude),
+      );
+
+      // Distance Threshold set to 50 meters (Standard pole spacing)
+      if (dist <= 50) {
+        // Condition: Same Account + Near + Same Report Type -> BLOCK
+        if (
+          parseInt(formData.report_type_id) ===
+          parseInt(pendingReportDetails.report_type_id)
+        ) {
+          return setError(
+            `You already have a pending report for this exact issue nearby (${Math.round(dist)}m away). Our dispatch team will inspect and resolve all adjacent infrastructure damage in this immediate area.`,
+          );
+        }
+        // If it's a DIFFERENT report type, we bypass this block and let them submit!
+      }
     }
 
     setIsSubmitting(true);
@@ -521,7 +575,7 @@ function ReportTab({ isActive }) {
           barangay_id: parseInt(formData.barangay_id),
           purok_sitio: formData.purok_sitio.trim() || null,
           branch_id: automaticBranchId,
-          status_id: 1,
+          status_id: 1, // Pending Status
           photo_url: publicUrlData.publicUrl,
         },
       ]);
@@ -579,6 +633,105 @@ function ReportTab({ isActive }) {
     );
   }
 
+  // BANNED UI
+  if (isBanned) {
+    return (
+      <div
+        className="bg-navy-tab"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "100vh",
+          padding: "20px 16px 110px 16px",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            margin: "auto",
+            backgroundColor: "#ffffff",
+            borderRadius: "24px",
+            padding: "35px 25px",
+            width: "100%",
+            maxWidth: "400px",
+            boxSizing: "border-box",
+            textAlign: "center",
+            boxShadow: "0 15px 30px rgba(0,0,0,0.2)",
+            animation: "contentFade 0.3s ease-out",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#fee2e2",
+              width: "80px",
+              height: "80px",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px auto",
+              boxShadow: "0 0 20px rgba(239, 68, 68, 0.4)",
+            }}
+          >
+            <XOctagon size={44} color="#dc2626" />
+          </div>
+
+          <h2
+            style={{
+              color: "#1e293b",
+              fontWeight: "900",
+              margin: "0 0 12px 0",
+              fontSize: "1.45rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+            }}
+          >
+            ACCOUNT RESTRICTED
+          </h2>
+
+          <p
+            style={{
+              color: "#475569",
+              fontSize: "0.9rem",
+              lineHeight: "1.6",
+              margin: "0 0 20px 0",
+              textAlign: "center",
+              padding: "0 10px",
+            }}
+          >
+            Your reporting privileges have been disabled by the administrator
+            due to policy violations.
+          </p>
+
+          <div
+            style={{
+              backgroundColor: "#fef2f2",
+              border: "1px solid #fca5a5",
+              borderRadius: "14px",
+              padding: "14px 15px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "0.85rem",
+                color: "#991b1b",
+                fontWeight: "900",
+                textTransform: "uppercase",
+              }}
+            >
+              Please contact support
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // UNVERIFIED UI
   if (verificationStatus !== "approved") {
     const isRejected = verificationStatus === "rejected";
 
@@ -686,102 +839,6 @@ function ReportTab({ isActive }) {
     );
   }
 
-  if (hasPendingReport) {
-    return (
-      <div
-        className="bg-navy-tab"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          minHeight: "100vh",
-          padding: "20px 16px 110px 16px",
-          boxSizing: "border-box",
-        }}
-      >
-        <div
-          style={{
-            margin: "auto",
-            backgroundColor: "#ffffff",
-            borderRadius: "24px",
-            padding: "35px 25px",
-            width: "100%",
-            maxWidth: "400px",
-            boxSizing: "border-box",
-            textAlign: "center",
-            boxShadow: "0 15px 30px rgba(0,0,0,0.2)",
-            animation: "contentFade 0.3s ease-out",
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: "#fef3c7",
-              width: "80px",
-              height: "80px",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 20px auto",
-            }}
-          >
-            <AlertCircle size={48} color="#d97706" />
-          </div>
-
-          <h2
-            style={{
-              color: "#1e293b",
-              fontWeight: "900",
-              margin: "0 0 12px 0",
-              fontSize: "1.35rem",
-            }}
-          >
-            {t.pendingReportReviewTitle}
-          </h2>
-
-          <p
-            style={{
-              color: "#475569",
-              fontSize: "0.88rem",
-              lineHeight: "1.6",
-              margin: "0 0 20px 0",
-              textAlign: "center",
-            }}
-          >
-            {t.pendingReportReviewDesc1}{" "}
-            <strong>{pendingReportDetails?.landmark || "your location"}</strong>
-            . {t.pendingReportReviewDesc2}
-          </p>
-
-          <div
-            style={{
-              backgroundColor: "#fffbe1",
-              border: "1px solid #fde047",
-              borderRadius: "14px",
-              padding: "12px 15px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "0.82rem",
-                color: "#334155",
-                fontWeight: "bold",
-              }}
-            >
-              Status:{" "}
-              <strong style={{ color: "#d97706" }}>
-                {t.pendingAdminReview}
-              </strong>
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="bg-navy-tab" style={{ overscrollBehavior: "none" }}>
       {showSuccessModal &&
@@ -832,8 +889,12 @@ function ReportTab({ isActive }) {
                   });
 
                   setHasPendingReport(true);
+                  // Ensure we store ALL data for distance & type checking of future reports!
                   setPendingReportDetails({
                     landmark: formData.landmark.trim(),
+                    latitude: coordinates.lat,
+                    longitude: coordinates.lon,
+                    report_type_id: formData.report_type_id,
                   });
                 }}
               >
@@ -1013,12 +1074,76 @@ function ReportTab({ isActive }) {
                       lineHeight: "1.4",
                     }}
                   >
-                    You cannot submit a new report while you have another report
-                    pending admin review. Accumulating 5 rejected reports will
-                    permanently block your account.
+                    Duplicate reports near existing issues will be blocked
+                    automatically. Continuous fake reports may result in account
+                    restriction.
                   </p>
                 </div>
               </div>
+
+              {hasPendingReport && (
+                <div
+                  style={{
+                    marginTop: "5px",
+                    backgroundColor: "#fffbe1",
+                    border: "1px dashed #fde047",
+                    borderRadius: "15px",
+                    padding: "15px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <AlertCircle size={20} color="#d97706" />
+                    <h3
+                      style={{
+                        margin: 0,
+                        color: "#d97706",
+                        fontSize: "0.95rem",
+                        fontWeight: "900",
+                      }}
+                    >
+                      Pending Report Active
+                    </h3>
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#475569",
+                      fontSize: "0.8rem",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    You currently have a report awaiting review at{" "}
+                    <strong style={{ color: "#d97706" }}>
+                      {pendingReportDetails?.landmark || "your location"}
+                    </strong>
+                    .
+                  </p>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#1e293b",
+                      fontSize: "0.82rem",
+                      fontWeight: "700",
+                      lineHeight: "1.3",
+                    }}
+                  >
+                    Are you reporting a{" "}
+                    <span style={{ color: "#1b0b8c", fontWeight: "900" }}>
+                      new and different damage
+                    </span>
+                    ?
+                  </p>
+                </div>
+              )}
 
               <button
                 onClick={() => setHasAcceptedGuidelines(true)}
@@ -1026,10 +1151,10 @@ function ReportTab({ isActive }) {
                   backgroundColor: "#1b0b8c",
                   color: "#ffffff",
                   border: "none",
-                  padding: "12px",
+                  padding: "14px 12px",
                   borderRadius: "50px",
                   fontWeight: "900",
-                  fontSize: "0.9rem",
+                  fontSize: "0.85rem",
                   marginTop: "4px",
                   cursor: "pointer",
                   boxShadow: "0 8px 20px rgba(27, 11, 140, 0.25)",
@@ -1038,6 +1163,7 @@ function ReportTab({ isActive }) {
                   justifyContent: "center",
                   gap: "8px",
                   transition: "transform 0.1s ease",
+                  textTransform: "uppercase",
                 }}
                 onMouseDown={(e) =>
                   (e.currentTarget.style.transform = "scale(0.97)")
@@ -1046,7 +1172,15 @@ function ReportTab({ isActive }) {
                   (e.currentTarget.style.transform = "scale(1)")
                 }
               >
-                <CheckCircle size={18} />I UNDERSTAND & PROCEED
+                {hasPendingReport ? (
+                  <>
+                    YES, NEW REPORT <ArrowRight size={18} />
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={18} /> I UNDERSTAND & PROCEED
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -1079,11 +1213,12 @@ function ReportTab({ isActive }) {
                 backgroundColor: "#fee2e2",
                 color: "#ef4444",
                 padding: "12px",
-                borderRadius: "30px",
+                borderRadius: "15px",
                 textAlign: "center",
                 fontWeight: "bold",
                 fontSize: "0.85rem",
                 marginBottom: "15px",
+                border: "1px solid #fca5a5",
               }}
             >
               {error}
@@ -1162,7 +1297,6 @@ function ReportTab({ isActive }) {
               onChange={handleInputChange}
             />
 
-            {/* 🌟 DYNAMICALLY HIGHLIGHT DESCRIPTION IF "OTHER" IS SELECTED */}
             <input
               type="text"
               name="description"

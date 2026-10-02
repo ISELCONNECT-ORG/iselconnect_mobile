@@ -380,7 +380,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "#000000",
+          background: "#f8fafc",
           zIndex: 99999,
           display: "flex",
           flexDirection: "column",
@@ -419,7 +419,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
               textTransform: "uppercase",
             }}
           >
-            {t.fixedEvidence || "Proof of Resolution"}
+            ACTED
           </span>
         </div>
         <div
@@ -942,7 +942,7 @@ function ResidentReportDetail({ report, onBack, onReportUpdated }) {
             }}
           >
             <ImageIcon size={22} />
-            {t.fixedEvidence || "View Proof of Resolution"}
+            ACTED
           </button>
         )}
 

@@ -3,6 +3,20 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { ChevronLeft } from "lucide-react";
 
+// Helper function to format timestamps into readable text
+const formatTime = (isoString) => {
+  if (!isoString) return "Pending";
+  const d = new Date(isoString);
+  return `${d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })} at ${d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })}`;
+};
+
 export default function ResidentMapOverlay({
   report,
   onBack,
@@ -24,7 +38,7 @@ export default function ResidentMapOverlay({
   );
   const isInProgress = activeStatus === "IN PROGRESS";
 
-  // 1. Initialize Map & Report Marker
+  // 1. Initialize Map & Report (Issue) Marker
   useEffect(() => {
     const lat = report.latitude ? parseFloat(report.latitude) : 16.7805;
     const lon = report.longitude ? parseFloat(report.longitude) : 121.6508;
@@ -33,7 +47,7 @@ export default function ResidentMapOverlay({
       if (!mapContainerRef.current) return;
 
       const customIcon = L.divIcon({
-        className: "custom-leaflet-marker",
+        className: "custom-leaflet-marker", // Removes default white box
         html: `<div style="background-color: #facc15; width: 22px; height: 22px; border-radius: 50%; border: 4px solid #1b0b8c; box-shadow: 0 4px 8px rgba(0,0,0,0.4);"></div>`,
         iconSize: [22, 22],
         iconAnchor: [11, 11],
@@ -51,14 +65,22 @@ export default function ResidentMapOverlay({
         mapRef.current.setView([lat, lon], 16);
       }
 
+      // 🌟 NEW: Issue Popup HTML
+      const issuePopup = `
+        <div style="text-align:center;line-height:1.4;">
+          <strong style="color:#1b0b8c;font-size:0.9rem;">ISSUE REPORTED</strong><br/>
+          <span style="font-size:0.8rem;color:#475569;font-weight:600;">${formatTime(report.created_at)}</span>
+        </div>
+      `;
+
       if (markerRef.current) markerRef.current.remove();
-      markerRef.current = L.marker([lat, lon], { icon: customIcon }).addTo(
-        mapRef.current,
-      );
+      markerRef.current = L.marker([lat, lon], { icon: customIcon })
+        .bindPopup(issuePopup, { closeButton: false, offset: [0, -10] }) // 🌟 Attach Popup
+        .addTo(mapRef.current);
     }, 100);
 
     return () => clearTimeout(initMap);
-  }, [report.latitude, report.longitude]);
+  }, [report.latitude, report.longitude, report.created_at]);
 
   // 2. Draw Routing and Dynamic Markers (Historical & Live)
   useEffect(() => {
@@ -90,10 +112,21 @@ export default function ResidentMapOverlay({
             iconSize: [24, 24],
             iconAnchor: [12, 12],
           });
+
+          // 🌟 NEW: Start Popup HTML
+          const startTime =
+            timelineData.inprogress_at || timelineData.assigned_at;
+          const startPopup = `
+            <div style="text-align:center;line-height:1.4;">
+              <strong style="color:#3b82f6;font-size:0.9rem;">STARTED WORK</strong><br/>
+              <span style="font-size:0.8rem;color:#475569;font-weight:600;">${formatTime(startTime)}</span>
+            </div>
+          `;
+
           if (!startMarkerRef.current) {
-            startMarkerRef.current = L.marker([sLat, sLon], {
-              icon: startIcon,
-            }).addTo(mapRef.current);
+            startMarkerRef.current = L.marker([sLat, sLon], { icon: startIcon })
+              .bindPopup(startPopup, { closeButton: false, offset: [0, -10] }) // 🌟 Attach Popup
+              .addTo(mapRef.current);
           }
         }
 
@@ -104,10 +137,25 @@ export default function ResidentMapOverlay({
             iconSize: [24, 24],
             iconAnchor: [12, 12],
           });
+
+          // 🌟 NEW: Resolved Popup HTML
+          const resolvedTime = timelineData.completion_at || report.updated_at;
+          const resolvedPopup = `
+            <div style="text-align:center;line-height:1.4;">
+              <strong style="color:#16a34a;font-size:0.9rem;">RESOLVED</strong><br/>
+              <span style="font-size:0.8rem;color:#475569;font-weight:600;">${formatTime(resolvedTime)}</span>
+            </div>
+          `;
+
           if (!resolvedMarkerRef.current) {
             resolvedMarkerRef.current = L.marker([resLat, resLon], {
               icon: resolvedIcon,
-            }).addTo(mapRef.current);
+            })
+              .bindPopup(resolvedPopup, {
+                closeButton: false,
+                offset: [0, -10],
+              }) // 🌟 Attach Popup
+              .addTo(mapRef.current);
           }
         }
 
@@ -179,11 +227,21 @@ export default function ResidentMapOverlay({
           iconAnchor: [13, 13],
         });
 
+        // 🌟 NEW: Live Tracker Popup HTML
+        const linemanPopup = `
+          <div style="text-align:center;line-height:1.4;">
+            <strong style="color:#10b981;font-size:0.9rem;">LINEMAN LOCATION</strong><br/>
+            <span style="font-size:0.8rem;color:#475569;font-weight:600;">Live Tracking Active</span>
+          </div>
+        `;
+
         if (!linemanMarkerRef.current) {
           linemanMarkerRef.current = L.marker([linemanLat, linemanLon], {
             icon: linemanIcon,
             zIndexOffset: 1000,
-          }).addTo(mapRef.current);
+          })
+            .bindPopup(linemanPopup, { closeButton: false, offset: [0, -10] }) // 🌟 Attach Popup
+            .addTo(mapRef.current);
         } else {
           linemanMarkerRef.current.setLatLng([linemanLat, linemanLon]);
         }
@@ -290,6 +348,15 @@ export default function ResidentMapOverlay({
           70% { transform: scale(1); box-shadow: 0 0 0 12px rgba(16, 185, 129, 0); }
           100% { transform: scale(0.85); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
+        /* Style for the popups to make them match the UI cleanly */
+        .leaflet-popup-content-wrapper {
+          border-radius: 12px;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+          padding: 2px;
+        }
+        .leaflet-popup-content {
+          margin: 12px 16px;
+        }
       `}</style>
       <div
         style={{
@@ -323,7 +390,7 @@ export default function ResidentMapOverlay({
             fontSize: "1rem",
           }}
         >
-          {t.viewLocationMap}
+          {t.viewLocationMap || "View Location Map"}
         </span>
       </div>
       <div style={{ flex: 1, width: "100%", position: "relative" }}>

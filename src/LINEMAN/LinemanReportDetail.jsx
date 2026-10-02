@@ -1,9 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { translations } from "../components/translations";
-import Webcam from "react-webcam";
 import { Geolocation } from "@capacitor/geolocation";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import {
   ChevronLeft,
   CheckCircle,
@@ -19,96 +16,27 @@ import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
 import "../Lineman.css";
 
-const base64ToBlob = (base64, mimeType = "image/jpeg") => {
-  const byteCharacters = atob(base64.split(",")[1]);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++)
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  return new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
-};
-
-// Reusable Full-Screen Wrapper for Map, Camera, and Remarks
-const FullScreenWrapper = ({ title, onBack, isDark, children }) => (
-  <div
-    style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: isDark ? "#000" : "#f8fafc",
-      zIndex: 99999,
-      display: "flex",
-      flexDirection: "column",
-      overflow: "hidden",
-      overscrollBehavior: "none",
-    }}
-  >
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "20px 15px",
-        paddingTop: "calc(20px + env(safe-area-inset-top))",
-        background: isDark ? "#000" : "#1b0b8c",
-        flexShrink: 0,
-      }}
-    >
-      <button
-        onClick={onBack}
-        style={{
-          background: "transparent",
-          border: "none",
-          padding: 0,
-          display: "flex",
-          alignItems: "center",
-          cursor: "pointer",
-        }}
-      >
-        <ChevronLeft size={32} color="#fff" />
-      </button>
-      <span
-        style={{
-          color: "#fff",
-          fontWeight: "900",
-          letterSpacing: "1px",
-          textTransform: "uppercase",
-          fontSize: "1rem",
-        }}
-      >
-        {title}
-      </span>
-      <div style={{ width: 32 }}></div>
-    </div>
-    {children}
-  </div>
-);
+import LinemanMapOverlay from "./LinemanMapOverlay";
+import LinemanResolutionFlow from "./LinemanResolutionFlow";
 
 function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const t = translations[localStorage.getItem("appLanguage") || "English"];
-  const mapContainerRef = useRef(null),
-    mapRef = useRef(null),
-    lineRef = useRef(null);
-  const markerRef = useRef(null),
-    linemanMarkerRef = useRef(null),
-    webcamRef = useRef(null),
-    watchIdRef = useRef(null);
+  const watchIdRef = useRef(null);
 
   const [activeStatus, setActiveStatus] = useState(
     report.report_statuses?.name?.toUpperCase() || "PENDING",
   );
-  const [successModal, setSuccessModal] = useState(null);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [isRemarksOpen, setIsRemarksOpen] = useState(false);
-  const [evidencePhoto, setEvidencePhoto] = useState(null);
-  const [resolutionRemarks, setResolutionRemarks] = useState("");
-  const [showMap, setShowMap] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDelayModal, setShowDelayModal] = useState(false);
-  const [delayReason, setDelayReason] = useState("");
-  const [isSubmittingDelay, setIsSubmittingDelay] = useState(false);
 
+  // Modals & Flows
+  const [successModal, setSuccessModal] = useState(null);
+  const [showDelayModal, setShowDelayModal] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [showResolutionFlow, setShowResolutionFlow] = useState(false);
+
+  // Data & State
+  const [delayReason, setDelayReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingDelay, setIsSubmittingDelay] = useState(false);
   const [companions, setCompanions] = useState([]);
   const [adminRemarks, setAdminRemarks] = useState("");
   const [assignedTeamName, setAssignedTeamName] = useState("Loading...");
@@ -117,19 +45,11 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const [hasOtherInProgress, setHasOtherInProgress] = useState(false);
   const [isCheckingActive, setIsCheckingActive] = useState(true);
 
-  // 🌟 NEW: State to hold the final GPS tag captured when remarks open
-  const [resolvedLocation, setResolvedLocation] = useState({
-    lat: null,
-    lon: null,
-    loading: false,
-    error: false,
-  });
-
   const isResolved =
     activeStatus === "RESOLVED" || activeStatus === "ADMIN VERIFIED";
   const isLocked = isResolved || activeStatus === "PENDING VERIFICATION";
 
-  // Hide the global navigation bar and lock background scroll while this screen is open
+  // Hide the global navigation bar and lock background scroll
   useEffect(() => {
     const navBar = document.querySelector(".bottom-nav-wrapper");
     if (navBar) navBar.style.display = "none";
@@ -167,7 +87,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     };
   }, []);
 
-  // 1. Real-time Status Sync
+  // Real-time Status Sync
   useEffect(() => {
     const channel = supabase
       .channel(`public:lineman_report_${report.id}`)
@@ -195,7 +115,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     return () => supabase.removeChannel(channel);
   }, [report.id]);
 
-  // 2. Initial Data Fetch
+  // Initial Data Fetch
   useEffect(() => {
     let isMounted = true;
     const fetchInitData = async () => {
@@ -211,6 +131,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           .from("assignments")
           .select(`lineman_id, admin_remarks, users(first_name, last_name)`)
           .eq("report_id", report.id);
+
         if (assigns && assigns.length > 0) {
           setCompanions([
             ...new Set(
@@ -257,7 +178,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                 "id",
                 activeTasks.map((a) => a.report_id),
               );
-            if (isMounted)
+            if (isMounted) {
               setHasOtherInProgress(
                 !!activeRep?.some(
                   (r) =>
@@ -265,6 +186,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                     r.report_statuses?.name?.toUpperCase() === "IN PROGRESS",
                 ),
               );
+            }
           }
         }
       } catch (err) {
@@ -279,7 +201,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     };
   }, [report.id, activeStatus]);
 
-  // 3. Live Tracking
+  // Live Tracking Sync
   useEffect(() => {
     if (activeStatus !== "IN PROGRESS" || !currentUserId) return;
     const track = async () => {
@@ -315,129 +237,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
       watchIdRef.current && Geolocation.clearWatch({ id: watchIdRef.current });
   }, [activeStatus, currentUserId, report.id]);
 
-  // 🌟 NEW: Fetch GPS tag immediately when the Remarks screen opens
-  useEffect(() => {
-    if (isRemarksOpen) {
-      const fetchFinalLocation = async () => {
-        setResolvedLocation({
-          lat: null,
-          lon: null,
-          loading: true,
-          error: false,
-        });
-        try {
-          const pos = await Geolocation.getCurrentPosition({
-            enableHighAccuracy: true,
-            timeout: 10000,
-          });
-          setResolvedLocation({
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude,
-            loading: false,
-            error: false,
-          });
-        } catch (geoError) {
-          console.warn("GPS Fetch Error on Resolve:", geoError);
-          setResolvedLocation({
-            lat: null,
-            lon: null,
-            loading: false,
-            error: true,
-          });
-        }
-      };
-      fetchFinalLocation();
-    }
-  }, [isRemarksOpen]);
-
-  // 4. Map & Routing Rendering
-  useEffect(() => {
-    if (!showMap || !mapContainerRef.current) {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current =
-          markerRef.current =
-          linemanMarkerRef.current =
-          lineRef.current =
-            null;
-      }
-      return;
-    }
-    const lat = parseFloat(report.latitude || 16.7805),
-      lon = parseFloat(report.longitude || 121.6508);
-    const targetIcon = L.divIcon({
-      className: "marker",
-      html: `<div style="background:#ea4335;width:22px;height:22px;border-radius:50%;border:4px solid #fff;box-shadow:0 4px 8px rgba(0,0,0,0.4)"></div>`,
-      iconSize: [22, 22],
-    });
-
-    if (!mapRef.current) {
-      mapRef.current = L.map(mapContainerRef.current, {
-        zoomControl: false,
-      }).setView([lat, lon], 16);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(
-        mapRef.current,
-      );
-    }
-    if (!markerRef.current)
-      markerRef.current = L.marker([lat, lon], { icon: targetIcon }).addTo(
-        mapRef.current,
-      );
-
-    if (linemanLocation) {
-      const lLat = parseFloat(linemanLocation.lat),
-        lLon = parseFloat(linemanLocation.lon);
-      const lIcon = L.divIcon({
-        html: `<div style="background:#10b981;width:26px;height:26px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 15px rgba(16,185,129,0.8);display:flex;align-items:center;justify-content:center;font-size:14px">⚡</div>`,
-        iconSize: [26, 26],
-      });
-
-      if (!linemanMarkerRef.current)
-        linemanMarkerRef.current = L.marker([lLat, lLon], {
-          icon: lIcon,
-          zIndexOffset: 1000,
-        }).addTo(mapRef.current);
-      else linemanMarkerRef.current.setLatLng([lLat, lLon]);
-
-      fetch(
-        `https://router.project-osrm.org/route/v1/driving/${lLon},${lLat};${lon},${lat}?overview=full&geometries=geojson`,
-      )
-        .then((r) => r.json())
-        .then((data) => {
-          const pts = data.routes?.[0]
-            ? data.routes[0].geometry.coordinates.map((c) => [c[1], c[0]])
-            : [
-                [lLat, lLon],
-                [lat, lon],
-              ];
-          if (!lineRef.current) {
-            lineRef.current = L.polyline(pts, {
-              color: "#1b0b8c",
-              weight: 5,
-              opacity: 0.8,
-            }).addTo(mapRef.current);
-            mapRef.current.fitBounds(lineRef.current.getBounds(), {
-              padding: [50, 50],
-            });
-          } else lineRef.current.setLatLngs(pts);
-        })
-        .catch(() => {
-          const fallback = [
-            [lLat, lLon],
-            [lat, lon],
-          ];
-          if (!lineRef.current)
-            lineRef.current = L.polyline(fallback, {
-              color: "#1b0b8c",
-              weight: 5,
-              dashArray: "10,10",
-            }).addTo(mapRef.current);
-          else lineRef.current.setLatLngs(fallback);
-        });
-    }
-  }, [showMap, report, linemanLocation]);
-
-  // Handlers
   const handleStartClick = async () => {
     if (hasOtherInProgress || isCheckingActive) return;
     setIsSubmitting(true);
@@ -488,16 +287,12 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         .select("id")
         .ilike("name", "IN PROGRESS")
         .single();
-
       await supabase
         .from("reports")
         .update({ status_id: st.id })
         .eq("id", report.id);
 
-      const updatePayload = {
-        inprogress_at: new Date().toISOString(),
-      };
-
+      const updatePayload = { inprogress_at: new Date().toISOString() };
       if (startLat && startLon) {
         updatePayload.start_lat = startLat;
         updatePayload.start_lon = startLon;
@@ -510,7 +305,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         .update(updatePayload)
         .eq("report_id", report.id)
         .eq("lineman_id", currentUserId);
-
       if (assignError) throw assignError;
 
       await logSystemAction("START_REPORT", `Started report #${report.id}.`);
@@ -522,83 +316,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     }
   };
 
-  const handleVerifyClick = () => {
-    if (isLocked) return;
-    setIsCameraOpen(true);
-  };
-
-  const captureEvidence = useCallback(() => {
-    if (webcamRef.current) {
-      const imageSrc = webcamRef.current.getScreenshot();
-      if (imageSrc) {
-        setEvidencePhoto(imageSrc);
-        setIsCameraOpen(false);
-        setIsRemarksOpen(true);
-      }
-    }
-  }, [webcamRef]);
-
-  const confirmStatusUpdate = async () => {
-    setIsSubmitting(true);
-    try {
-      if (!evidencePhoto || !resolutionRemarks.trim())
-        throw new Error("Missing photo or remarks.");
-
-      // Upload the photo
-      const fileName = `resolved-${report.id}-${Date.now()}.jpg`;
-      await supabase.storage
-        .from("report_photos")
-        .upload(fileName, base64ToBlob(evidencePhoto), {
-          contentType: "image/jpeg",
-        });
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("report_photos").getPublicUrl(fileName);
-
-      // Update main report
-      await supabase
-        .from("reports")
-        .update({
-          status_id: 4,
-          resolved_photo_url: publicUrl,
-          remarks: resolutionRemarks.trim(),
-        })
-        .eq("id", report.id);
-
-      // 🌟 UPDATED: Use the GPS tag fetched from the `useEffect`
-      const assignmentPayload = {
-        completion_at: new Date().toISOString(),
-      };
-
-      if (resolvedLocation.lat && resolvedLocation.lon) {
-        assignmentPayload.resolved_lat = resolvedLocation.lat;
-        assignmentPayload.resolved_lon = resolvedLocation.lon;
-      }
-
-      await supabase
-        .from("assignments")
-        .update(assignmentPayload)
-        .eq("report_id", report.id)
-        .eq("lineman_id", currentUserId);
-
-      await logSystemAction(
-        "UPDATE_REPORT_STATUS",
-        `Submitted report #${report.id} for verification.`,
-      );
-
-      setActiveStatus("PENDING VERIFICATION");
-      setSuccessModal({
-        title: t.updatedTitle || "UPDATED",
-        msg: `${t.statusUpdatedText || "Status successfully updated to"} PENDING VERIFICATION!`,
-      });
-    } catch (e) {
-      alert("Error submitting verification: " + e.message);
-    } finally {
-      setIsSubmitting(false);
-      setIsRemarksOpen(false);
-    }
-  };
-
   const handleDelaySubmit = async () => {
     if (!delayReason.trim()) return;
     setIsSubmittingDelay(true);
@@ -607,7 +324,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         .from("reports")
         .update({ delay_reason: delayReason.trim() })
         .eq("id", report.id);
-
       if (updateError) throw updateError;
 
       const { data: repData } = await supabase
@@ -615,7 +331,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         .select("residents_id")
         .eq("id", report.id)
         .single();
-
       if (repData?.residents_id) {
         const { error: notifError } = await supabase
           .from("notifications")
@@ -634,7 +349,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         "REPORT_DELAYED",
         `Delayed report #${report.id}: ${delayReason.trim()}`,
       );
-
       setShowDelayModal(false);
       setDelayReason("");
       setSuccessModal({
@@ -648,267 +362,38 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     }
   };
 
-  // Render Full Screen Overlays
-  if (showMap)
+  // Extract Map Rendering
+  if (showMap) {
     return (
-      <FullScreenWrapper title={t.locationMap} onBack={() => setShowMap(false)}>
-        <div
-          style={{ flex: 1, minHeight: 0, width: "100%", position: "relative" }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              bottom: "calc(30px + env(safe-area-inset-bottom))",
-              left: "50%",
-              transform: "translateX(-50%)",
-              zIndex: 1000,
-              background: "rgba(255,255,255,0.95)",
-              padding: "10px 15px",
-              borderRadius: "30px",
-              boxShadow: "0 5px 15px rgba(0,0,0,0.1)",
-              display: "flex",
-              gap: "15px",
-              fontWeight: "bold",
-              fontSize: "0.8rem",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-              <div
-                style={{
-                  width: 12,
-                  height: 12,
-                  background: "#ea4335",
-                  borderRadius: "50%",
-                  border: "2px solid #fff",
-                }}
-              />{" "}
-              Issue
-            </div>
-            {activeStatus === "IN PROGRESS" && (
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "5px" }}
-              >
-                <div
-                  style={{
-                    width: 12,
-                    height: 12,
-                    background: "#10b981",
-                    borderRadius: "50%",
-                    border: "2px solid #fff",
-                  }}
-                />{" "}
-                You
-              </div>
-            )}
-          </div>
-          <div
-            ref={mapContainerRef}
-            style={{ position: "absolute", top: 0, bottom: 0, width: "100%" }}
-          />
-        </div>
-      </FullScreenWrapper>
+      <LinemanMapOverlay
+        report={report}
+        onBack={() => setShowMap(false)}
+        linemanLocation={linemanLocation}
+        activeStatus={activeStatus}
+        t={t}
+      />
     );
+  }
 
-  if (isCameraOpen)
+  // Extract Resolution Flow
+  if (showResolutionFlow) {
     return (
-      <FullScreenWrapper
-        title="Proof of Resolution"
-        onBack={() => setIsCameraOpen(false)}
-        isDark
-      >
-        <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            position: "relative",
-            width: "100%",
-            background: "#111",
-            overflow: "hidden",
-          }}
-        >
-          <Webcam
-            ref={webcamRef}
-            screenshotFormat="image/jpeg"
-            videoConstraints={{ facingMode: "environment" }}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        </div>
-        <div
-          style={{
-            flexShrink: 0,
-            background: "#e2e8f0",
-            padding: "20px 15px",
-            paddingBottom: "calc(30px + env(safe-area-inset-bottom))",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            borderRadius: "30px 30px 0 0",
-          }}
-        >
-          <p style={{ margin: "0 0 15px 0", fontWeight: "900" }}>
-            {t.captureTheFix}
-          </p>
-          <button
-            onClick={captureEvidence}
-            style={{
-              width: 70,
-              height: 70,
-              borderRadius: "50%",
-              background: "#cbd5e1",
-              border: "5px solid #fff",
-              boxShadow: "0 0 0 3px #000",
-            }}
-          />
-        </div>
-      </FullScreenWrapper>
-    );
-
-  if (isRemarksOpen)
-    return (
-      <FullScreenWrapper
-        title="Resolution Remarks"
-        onBack={() => {
-          setIsRemarksOpen(false);
-          setIsCameraOpen(true);
+      <LinemanResolutionFlow
+        report={report}
+        currentUserId={currentUserId}
+        onBack={() => setShowResolutionFlow(false)}
+        t={t}
+        onSuccess={() => {
+          setShowResolutionFlow(false);
+          setActiveStatus("PENDING VERIFICATION");
+          setSuccessModal({
+            title: t.updatedTitle || "UPDATED",
+            msg: `${t.statusUpdatedText || "Status successfully updated to"} PENDING VERIFICATION!`,
+          });
         }}
-      >
-        <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            overflowY: "auto",
-            WebkitOverflowScrolling: "touch",
-            display: "flex",
-            flexDirection: "column",
-            padding: "20px",
-            paddingBottom: "calc(20px + env(safe-area-inset-bottom))",
-          }}
-        >
-          <img
-            src={evidencePhoto}
-            alt="Proof"
-            style={{
-              width: "100%",
-              height: "220px",
-              flexShrink: 0,
-              objectFit: "cover",
-              borderRadius: "15px",
-              marginBottom: "12px",
-              border: "2px solid #cbd5e1",
-            }}
-          />
-
-          {/* 🌟 NEW: Clean UI Display for the Geo-Tag */}
-          <div
-            style={{
-              background: "#ffffff",
-              padding: "12px",
-              borderRadius: "12px",
-              border: "1px solid #e2e8f0",
-              marginBottom: "20px",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              fontSize: "0.85rem",
-              color: "#475569",
-              boxShadow: "0 2px 5px rgba(0,0,0,0.02)",
-            }}
-          >
-            <MapPin
-              size={22}
-              color={resolvedLocation.error ? "#ef4444" : "#1b0b8c"}
-              style={{ flexShrink: 0 }}
-            />
-            <div style={{ flex: 1, overflow: "hidden" }}>
-              <span
-                style={{
-                  fontWeight: "900",
-                  color: "#1e293b",
-                  display: "block",
-                  marginBottom: "2px",
-                }}
-              >
-                RESOLUTION GEO-TAG
-              </span>
-              {resolvedLocation.loading ? (
-                <span style={{ fontStyle: "italic", color: "#64748b" }}>
-                  Fetching precise location...
-                </span>
-              ) : resolvedLocation.error ? (
-                <span style={{ color: "#ef4444", fontWeight: "600" }}>
-                  GPS connection unavailable
-                </span>
-              ) : (
-                <span
-                  style={{
-                    fontFamily: "monospace",
-                    fontSize: "0.95rem",
-                    fontWeight: "bold",
-                    color: "#16a34a",
-                  }}
-                >
-                  {resolvedLocation.lat?.toFixed(5)},{" "}
-                  {resolvedLocation.lon?.toFixed(5)}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <textarea
-            value={resolutionRemarks}
-            onChange={(e) => setResolutionRemarks(e.target.value)}
-            placeholder="Describe what was fixed..."
-            style={{
-              width: "100%",
-              height: "140px",
-              flexShrink: 0,
-              padding: "15px",
-              borderRadius: "15px",
-              border: "1px solid #cbd5e1",
-              fontSize: "1rem",
-              resize: "none",
-              marginBottom: "20px",
-              boxSizing: "border-box",
-              backgroundColor: "#ffffff",
-              color: "#1e293b",
-              fontFamily: "inherit",
-            }}
-          />
-          <button
-            onClick={confirmStatusUpdate}
-            // Disable button if still loading GPS, missing remarks, or currently submitting
-            disabled={
-              isSubmitting ||
-              !resolutionRemarks.trim() ||
-              resolvedLocation.loading
-            }
-            style={{
-              marginTop: "auto",
-              flexShrink: 0,
-              background: "#1b0b8c",
-              color: "#fff",
-              padding: "18px",
-              borderRadius: "30px",
-              fontWeight: "900",
-              border: "none",
-              opacity:
-                isSubmitting ||
-                !resolutionRemarks.trim() ||
-                resolvedLocation.loading
-                  ? 0.6
-                  : 1,
-              transition: "opacity 0.2s",
-            }}
-          >
-            {resolvedLocation.loading
-              ? "Acquiring GPS..."
-              : isSubmitting
-                ? "Submitting..."
-                : "Submit Verification"}
-          </button>
-        </div>
-      </FullScreenWrapper>
+      />
     );
+  }
 
   // Main UI
   return (
@@ -1177,7 +662,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           padding: "16px 16px 24px 16px",
         }}
       >
-        {/* Lock Banner */}
         {isLocked && (
           <div
             style={{
@@ -1199,7 +683,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           </div>
         )}
 
-        {/* Photo Section */}
         <div style={{ marginBottom: "20px" }}>
           {report.photo_url ? (
             <img
@@ -1249,7 +732,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           )}
         </div>
 
-        {/* Info Blocks */}
         <div className="detail-info-section" style={{ marginBottom: "15px" }}>
           <p>
             <strong>ADDRESS:</strong>{" "}
@@ -1356,6 +838,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         >
           <MapPin size={22} /> VIEW MAP
         </button>
+
         <div
           style={{
             display: "flex",
@@ -1418,7 +901,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         </div>
       </div>
 
-      {/* Action Bar (normal flex child, pinned to the bottom) */}
+      {/* Action Bar */}
       <div
         style={{
           flexShrink: 0,
@@ -1476,7 +959,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           </>
         ) : (
           <button
-            onClick={handleVerifyClick}
+            onClick={() => setShowResolutionFlow(true)}
             disabled={isLocked || activeStatus !== "IN PROGRESS"}
             style={{
               width: "100%",

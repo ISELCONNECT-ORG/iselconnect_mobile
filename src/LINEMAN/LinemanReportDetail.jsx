@@ -117,6 +117,14 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   const [hasOtherInProgress, setHasOtherInProgress] = useState(false);
   const [isCheckingActive, setIsCheckingActive] = useState(true);
 
+  // 🌟 NEW: State to hold the final GPS tag captured when remarks open
+  const [resolvedLocation, setResolvedLocation] = useState({
+    lat: null,
+    lon: null,
+    loading: false,
+    error: false,
+  });
+
   const isResolved =
     activeStatus === "RESOLVED" || activeStatus === "ADMIN VERIFIED";
   const isLocked = isResolved || activeStatus === "PENDING VERIFICATION";
@@ -142,7 +150,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     html.style.overscrollBehavior = "none";
     body.style.overflow = "hidden";
     body.style.overscrollBehavior = "none";
-    body.style.position = "fixed"; // iOS-safe lock
+    body.style.position = "fixed";
     body.style.top = `-${scrollY}px`;
     body.style.width = "100%";
 
@@ -187,7 +195,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     return () => supabase.removeChannel(channel);
   }, [report.id]);
 
-  // 2. Initial Data Fetch (Team & Active Lock Check)
+  // 2. Initial Data Fetch
   useEffect(() => {
     let isMounted = true;
     const fetchInitData = async () => {
@@ -307,6 +315,41 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
       watchIdRef.current && Geolocation.clearWatch({ id: watchIdRef.current });
   }, [activeStatus, currentUserId, report.id]);
 
+  // 🌟 NEW: Fetch GPS tag immediately when the Remarks screen opens
+  useEffect(() => {
+    if (isRemarksOpen) {
+      const fetchFinalLocation = async () => {
+        setResolvedLocation({
+          lat: null,
+          lon: null,
+          loading: true,
+          error: false,
+        });
+        try {
+          const pos = await Geolocation.getCurrentPosition({
+            enableHighAccuracy: true,
+            timeout: 10000,
+          });
+          setResolvedLocation({
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            loading: false,
+            error: false,
+          });
+        } catch (geoError) {
+          console.warn("GPS Fetch Error on Resolve:", geoError);
+          setResolvedLocation({
+            lat: null,
+            lon: null,
+            loading: false,
+            error: true,
+          });
+        }
+      };
+      fetchFinalLocation();
+    }
+  }, [isRemarksOpen]);
+
   // 4. Map & Routing Rendering
   useEffect(() => {
     if (!showMap || !mapContainerRef.current) {
@@ -403,6 +446,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         .from("assignments")
         .select("report_id")
         .eq("lineman_id", currentUserId);
+
       if (dbCheck?.length > 0) {
         const { data: act } = await supabase
           .from("reports")
@@ -422,23 +466,57 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           return alert("Finish your active task first.");
         }
       }
+
+      let startLat = null;
+      let startLon = null;
+      try {
+        const pos = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 10000,
+        });
+        startLat = pos.coords.latitude;
+        startLon = pos.coords.longitude;
+      } catch (geoError) {
+        console.warn("GPS Fetch Error:", geoError);
+        alert(
+          "Warning: Could not detect your GPS location. Please make sure location services/GPS are turned ON. The task will start, but the starting path won't be saved.",
+        );
+      }
+
       const { data: st } = await supabase
         .from("report_statuses")
         .select("id")
         .ilike("name", "IN PROGRESS")
         .single();
+
       await supabase
         .from("reports")
         .update({ status_id: st.id })
         .eq("id", report.id);
-      await supabase
+
+      const updatePayload = {
+        inprogress_at: new Date().toISOString(),
+      };
+
+      if (startLat && startLon) {
+        updatePayload.start_lat = startLat;
+        updatePayload.start_lon = startLon;
+        updatePayload.current_lat = startLat;
+        updatePayload.current_lon = startLon;
+      }
+
+      const { error: assignError } = await supabase
         .from("assignments")
-        .update({ inprogress_at: new Date().toISOString() })
-        .eq("report_id", report.id);
+        .update(updatePayload)
+        .eq("report_id", report.id)
+        .eq("lineman_id", currentUserId);
+
+      if (assignError) throw assignError;
+
       await logSystemAction("START_REPORT", `Started report #${report.id}.`);
       setActiveStatus("IN PROGRESS");
     } catch (e) {
-      alert(e.message);
+      alert("Error starting work: " + e.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -465,6 +543,8 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     try {
       if (!evidencePhoto || !resolutionRemarks.trim())
         throw new Error("Missing photo or remarks.");
+
+      // Upload the photo
       const fileName = `resolved-${report.id}-${Date.now()}.jpg`;
       await supabase.storage
         .from("report_photos")
@@ -475,6 +555,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         data: { publicUrl },
       } = supabase.storage.from("report_photos").getPublicUrl(fileName);
 
+      // Update main report
       await supabase
         .from("reports")
         .update({
@@ -483,10 +564,23 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           remarks: resolutionRemarks.trim(),
         })
         .eq("id", report.id);
+
+      // 🌟 UPDATED: Use the GPS tag fetched from the `useEffect`
+      const assignmentPayload = {
+        completion_at: new Date().toISOString(),
+      };
+
+      if (resolvedLocation.lat && resolvedLocation.lon) {
+        assignmentPayload.resolved_lat = resolvedLocation.lat;
+        assignmentPayload.resolved_lon = resolvedLocation.lon;
+      }
+
       await supabase
         .from("assignments")
-        .update({ completion_at: new Date().toISOString() })
-        .eq("report_id", report.id);
+        .update(assignmentPayload)
+        .eq("report_id", report.id)
+        .eq("lineman_id", currentUserId);
+
       await logSystemAction(
         "UPDATE_REPORT_STATUS",
         `Submitted report #${report.id} for verification.`,
@@ -498,7 +592,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         msg: `${t.statusUpdatedText || "Status successfully updated to"} PENDING VERIFICATION!`,
       });
     } catch (e) {
-      alert(e.message);
+      alert("Error submitting verification: " + e.message);
     } finally {
       setIsSubmitting(false);
       setIsRemarksOpen(false);
@@ -509,7 +603,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     if (!delayReason.trim()) return;
     setIsSubmittingDelay(true);
     try {
-      // 1. Update the Report table
       const { error: updateError } = await supabase
         .from("reports")
         .update({ delay_reason: delayReason.trim() })
@@ -517,14 +610,12 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
 
       if (updateError) throw updateError;
 
-      // 2. Safely grab the resident ID
       const { data: repData } = await supabase
         .from("reports")
         .select("residents_id")
         .eq("id", report.id)
         .single();
 
-      // 3. Post to notifications using residents_id
       if (repData?.residents_id) {
         const { error: notifError } = await supabase
           .from("notifications")
@@ -535,10 +626,8 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               message: `Delay reported for your issue (${report.report_types?.name || "Report #" + report.id}). Reason: ${delayReason.trim()}`,
             },
           ]);
-
-        if (notifError) {
+        if (notifError)
           console.error("Supabase Notification Error:", notifError.message);
-        }
       }
 
       await logSystemAction(
@@ -704,10 +793,67 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               flexShrink: 0,
               objectFit: "cover",
               borderRadius: "15px",
-              marginBottom: "20px",
+              marginBottom: "12px",
               border: "2px solid #cbd5e1",
             }}
           />
+
+          {/* 🌟 NEW: Clean UI Display for the Geo-Tag */}
+          <div
+            style={{
+              background: "#ffffff",
+              padding: "12px",
+              borderRadius: "12px",
+              border: "1px solid #e2e8f0",
+              marginBottom: "20px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              fontSize: "0.85rem",
+              color: "#475569",
+              boxShadow: "0 2px 5px rgba(0,0,0,0.02)",
+            }}
+          >
+            <MapPin
+              size={22}
+              color={resolvedLocation.error ? "#ef4444" : "#1b0b8c"}
+              style={{ flexShrink: 0 }}
+            />
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              <span
+                style={{
+                  fontWeight: "900",
+                  color: "#1e293b",
+                  display: "block",
+                  marginBottom: "2px",
+                }}
+              >
+                RESOLUTION GEO-TAG
+              </span>
+              {resolvedLocation.loading ? (
+                <span style={{ fontStyle: "italic", color: "#64748b" }}>
+                  Fetching precise location...
+                </span>
+              ) : resolvedLocation.error ? (
+                <span style={{ color: "#ef4444", fontWeight: "600" }}>
+                  GPS connection unavailable
+                </span>
+              ) : (
+                <span
+                  style={{
+                    fontFamily: "monospace",
+                    fontSize: "0.95rem",
+                    fontWeight: "bold",
+                    color: "#16a34a",
+                  }}
+                >
+                  {resolvedLocation.lat?.toFixed(5)},{" "}
+                  {resolvedLocation.lon?.toFixed(5)}
+                </span>
+              )}
+            </div>
+          </div>
+
           <textarea
             value={resolutionRemarks}
             onChange={(e) => setResolutionRemarks(e.target.value)}
@@ -730,7 +876,12 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           />
           <button
             onClick={confirmStatusUpdate}
-            disabled={isSubmitting || !resolutionRemarks.trim()}
+            // Disable button if still loading GPS, missing remarks, or currently submitting
+            disabled={
+              isSubmitting ||
+              !resolutionRemarks.trim() ||
+              resolvedLocation.loading
+            }
             style={{
               marginTop: "auto",
               flexShrink: 0,
@@ -740,10 +891,20 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               borderRadius: "30px",
               fontWeight: "900",
               border: "none",
-              opacity: isSubmitting || !resolutionRemarks.trim() ? 0.6 : 1,
+              opacity:
+                isSubmitting ||
+                !resolutionRemarks.trim() ||
+                resolvedLocation.loading
+                  ? 0.6
+                  : 1,
+              transition: "opacity 0.2s",
             }}
           >
-            {isSubmitting ? "Submitting..." : "Submit Verification"}
+            {resolvedLocation.loading
+              ? "Acquiring GPS..."
+              : isSubmitting
+                ? "Submitting..."
+                : "Submit Verification"}
           </button>
         </div>
       </FullScreenWrapper>
@@ -955,12 +1116,12 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         </div>
       )}
 
-      {/* 🌟 FIXED HEADER (Moved out of the scrollable body) */}
+      {/* FIXED HEADER */}
       <div
         style={{
           flexShrink: 0,
           padding: "calc(20px + env(safe-area-inset-top)) 16px 16px",
-          background: "#f8fafc", // Solid background color
+          background: "#f8fafc",
           zIndex: 50,
           display: "flex",
           justifyContent: "space-between",

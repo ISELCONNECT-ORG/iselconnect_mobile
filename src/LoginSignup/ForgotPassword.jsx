@@ -15,7 +15,10 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
 
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState(""); // 🌟 ADDED Confirm Password State
+
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // 🌟 ADDED visibility toggle for second field
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -31,6 +34,8 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
   const reqSpecial = /[!@#$%^&*(),.?":{}|<>\-_]/.test(newPassword);
 
   const isPasswordValid = reqLength && reqLetter && reqNumber && reqSpecial;
+  const doPasswordsMatch =
+    newPassword === confirmPassword && confirmPassword.length > 0;
 
   // Helper to completely clear the recovery memory
   const clearRecoveryData = () => {
@@ -100,6 +105,11 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
     // Double-check validation before submitting
     if (!isPasswordValid) {
       return setError("Please ensure all password requirements are met.");
+    }
+
+    // 🌟 ADDED Match Check
+    if (newPassword !== confirmPassword) {
+      return setError("Passwords do not match. Please try again.");
     }
 
     setIsLoading(true);
@@ -258,7 +268,8 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
             >
               Enter your new secure password below.
             </p>
-            <div className="auth-input-group">
+
+            <div className="auth-input-group" style={{ marginBottom: "15px" }}>
               <label>New Password</label>
               <div className="password-input-wrapper">
                 <input
@@ -283,6 +294,38 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
               </div>
             </div>
 
+            {/* 🌟 ADDED Confirm Password Input */}
+            <div className="auth-input-group">
+              <label>Confirm Password</label>
+              <div className="password-input-wrapper">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  className="auth-input"
+                  placeholder="Re-enter new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  style={{
+                    border:
+                      confirmPassword.length > 0 && !doPasswordsMatch
+                        ? "2px solid #ef4444"
+                        : "",
+                  }}
+                />
+                <button
+                  type="button"
+                  className="eye-btn"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff size={20} color="#64748b" />
+                  ) : (
+                    <Eye size={20} color="#64748b" />
+                  )}
+                </button>
+              </div>
+            </div>
+
             {/* REAL-TIME PASSWORD VALIDATION UI */}
             <div
               style={{
@@ -299,6 +342,7 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
                 { valid: reqLetter, label: "At least 1 letter" },
                 { valid: reqNumber, label: "At least 1 number" },
                 { valid: reqSpecial, label: "At least 1 special character" },
+                { valid: doPasswordsMatch, label: "Passwords match" }, // 🌟 ADDED match validation visual
               ].map((rule, idx) => (
                 <div
                   key={idx}
@@ -325,9 +369,12 @@ function ForgotPassword({ onBack, onPasswordUpdated }) {
             <button
               type="submit"
               className="auth-submit-btn"
-              // Button is disabled until the password is valid OR if it's loading
-              disabled={isLoading || !isPasswordValid}
-              style={{ opacity: isLoading || !isPasswordValid ? 0.5 : 1 }}
+              // Button is disabled until the password is valid, matches, OR if it's loading
+              disabled={isLoading || !isPasswordValid || !doPasswordsMatch}
+              style={{
+                opacity:
+                  isLoading || !isPasswordValid || !doPasswordsMatch ? 0.5 : 1,
+              }}
             >
               {isLoading ? "Updating..." : "Update Password"}
             </button>

@@ -96,7 +96,8 @@ const SearchableDropdown = ({
         }}
         onClick={() => !disabled && setIsOpen(true)}
         disabled={disabled}
-        autoComplete="off"
+        // 🌟 FIXED: Using "new-password" blocks mobile browsers from aggressively auto-filling emails here
+        autoComplete="new-password"
       />
       <div
         style={{
@@ -172,6 +173,9 @@ function SignUp({ onBack }) {
   const [errorMsg, setErrorMsg] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // Tracking scroll for Privacy Act
+  const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
   const [municipalities, setMunicipalities] = useState([]);
   const [barangays, setBarangays] = useState([]);
@@ -260,19 +264,21 @@ function SignUp({ onBack }) {
     });
   };
 
+  const handlePrivacyScroll = (e) => {
+    const { scrollHeight, scrollTop, clientHeight } = e.target;
+    if (Math.ceil(scrollTop + clientHeight) >= scrollHeight - 5) {
+      setHasScrolledToBottom(true);
+    }
+  };
+
   const isOtherMunicipality =
     municipalities.find(
       (m) => m.id.toString() === formData.municipality_id.toString(),
     )?.name === "Other / Outside Coverage Area";
 
+  // 🌟 FIXED: We receive the image, but we completely ignore parsedData to stop garbage text auto-filling
   const handleIdCaptured = (imageSrc, parsedData) => {
     setCapturedIdImage(imageSrc);
-    setFormData((prev) => ({
-      ...prev,
-      idNumber: parsedData.idNumber || prev.idNumber,
-      firstName: parsedData.firstName || prev.firstName,
-      lastName: parsedData.lastName || prev.lastName,
-    }));
     setSignupStep("selfie-scan");
   };
 
@@ -433,7 +439,6 @@ function SignUp({ onBack }) {
   };
 
   const handleBackNavigation = () => {
-    // 🌟 FIXED: Allows navigation back from the OTP step
     if (signupStep === "otp") setSignupStep("form");
     else if (signupStep === "form") setSignupStep("selfie-scan");
     else if (signupStep === "selfie-scan") setSignupStep("id-scan");
@@ -528,7 +533,6 @@ function SignUp({ onBack }) {
         )}
 
       <div className="auth-top-section auth-bg-photo">
-        {/* 🌟 FIXED: Removed conditional wrapper so button displays on ALL steps */}
         <button
           className="auth-back-btn"
           type="button"
@@ -554,7 +558,7 @@ function SignUp({ onBack }) {
 
         {errorMsg && <div className="error-alert">{errorMsg}</div>}
 
-        {/* STEP 1: PRIVACY ACT */}
+        {/* STEP 1: PRIVACY ACT WITH EXPANDED SCROLL-TO-ACCEPT */}
         {signupStep === "privacy" && (
           <div
             style={{
@@ -565,7 +569,7 @@ function SignUp({ onBack }) {
           >
             <div
               style={{
-                backgroundColor: "#f8fafc",
+                backgroundColor: "#ffffff",
                 padding: "20px",
                 borderRadius: "15px",
                 boxShadow: "inset 0 2px 4px rgba(0,0,0,0.05)",
@@ -587,52 +591,154 @@ function SignUp({ onBack }) {
                   Data Privacy & Verification
                 </h3>
               </div>
-              <p
+
+              {/* SCROLLABLE TEXT BOX */}
+              <div
+                onScroll={handlePrivacyScroll}
                 style={{
+                  maxHeight: "350px",
+                  overflowY: "auto",
+                  padding: "15px",
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "10px",
                   fontSize: "0.85rem",
-                  color: "#334155",
+                  color: "#475569",
                   lineHeight: "1.6",
-                  marginBottom: "10px",
-                  textAlign: "justify",
                 }}
               >
-                In compliance with the <strong>Republic Act No. 10173</strong>{" "}
-                or the Data Privacy Act of 2012, ISELCONNECT strictly protects
-                your personal information.
-              </p>
-              <p
-                style={{
-                  fontSize: "0.85rem",
-                  color: "#334155",
-                  lineHeight: "1.6",
-                  marginBottom: "10px",
-                  textAlign: "justify",
-                }}
-              >
-                To maintain a secure <strong>"One Account Per Person"</strong>{" "}
-                policy, you will be required to provide a Valid Government ID
-                and a Live Selfie. This prevents duplicate accounts and ensures
-                accurate reporting.
-              </p>
-              <p
-                style={{
-                  fontSize: "0.85rem",
-                  color: "#334155",
-                  lineHeight: "1.6",
-                  margin: 0,
-                  textAlign: "justify",
-                }}
-              >
-                Your data will never be shared with unverified third parties and
-                is exclusively handled by authorized ISELCO-1 personnel.
-              </p>
+                <p style={{ marginTop: 0 }}>
+                  Welcome to <strong>ISELCONNECT</strong>, the official incident
+                  reporting platform for ISELCO-1. Before you proceed, please
+                  read our Data Privacy guidelines carefully.
+                </p>
+
+                <p
+                  style={{
+                    color: "#1b0b8c",
+                    fontWeight: "bold",
+                    marginBottom: "4px",
+                  }}
+                >
+                  1. Compliance with the Law
+                </p>
+                <p style={{ marginTop: 0 }}>
+                  In strict compliance with{" "}
+                  <strong>Republic Act No. 10173</strong> (the Data Privacy Act
+                  of 2012), ISELCONNECT is committed to protecting your personal
+                  information. We ensure that your data is processed securely,
+                  fairly, and lawfully.
+                </p>
+
+                <p
+                  style={{
+                    color: "#1b0b8c",
+                    fontWeight: "bold",
+                    marginBottom: "4px",
+                  }}
+                >
+                  2. Information We Collect
+                </p>
+                <p style={{ marginTop: 0 }}>
+                  To create a verified resident account, we collect the
+                  following information: your full name, complete residential
+                  address, mobile number, email address, a clear photograph of a
+                  valid Government ID, and a live selfie.
+                </p>
+
+                <p
+                  style={{
+                    color: "#1b0b8c",
+                    fontWeight: "bold",
+                    marginBottom: "4px",
+                  }}
+                >
+                  3. Purpose of Data Collection
+                </p>
+                <p style={{ marginTop: 0 }}>
+                  We collect your data for the following specific purposes:
+                </p>
+                <ul style={{ margin: "5px 0", paddingLeft: "20px" }}>
+                  <li style={{ marginBottom: "6px" }}>
+                    <strong>Identity Verification:</strong> To enforce our "One
+                    Account Per Person" policy and prevent dummy or spam
+                    accounts.
+                  </li>
+                  <li style={{ marginBottom: "6px" }}>
+                    <strong>Accurate Dispatching:</strong> To ensure our linemen
+                    are responding to legitimate reports from actual verified
+                    residents.
+                  </li>
+                  <li>
+                    <strong>Communication:</strong> To send you critical updates
+                    regarding your submitted reports and power advisories.
+                  </li>
+                </ul>
+
+                <p
+                  style={{
+                    color: "#1b0b8c",
+                    fontWeight: "bold",
+                    marginBottom: "4px",
+                    marginTop: "15px",
+                  }}
+                >
+                  4. Data Security & Sharing
+                </p>
+                <p style={{ marginTop: 0 }}>
+                  Your personal data is encrypted and securely stored in our
+                  databases. We will <strong>never</strong> sell, distribute, or
+                  lease your personal information to third parties. Access to
+                  your eKYC (Know Your Customer) documents is strictly
+                  restricted to authorized ISELCO-1 verification officers only.
+                </p>
+
+                <p
+                  style={{
+                    color: "#1b0b8c",
+                    fontWeight: "bold",
+                    marginBottom: "4px",
+                  }}
+                >
+                  5. User Rights
+                </p>
+                <p style={{ marginTop: 0 }}>
+                  You have the right to access, update, or request the deletion
+                  of your personal data from our system. By proceeding with the
+                  registration, you explicitly grant ISELCONNECT the consent to
+                  collect, process, and store your data for the operational
+                  purposes stated above.
+                </p>
+
+                <p
+                  style={{
+                    marginBottom: 0,
+                    color: "#1e293b",
+                    fontWeight: "bold",
+                    textAlign: "center",
+                    marginTop: "20px",
+                    paddingTop: "15px",
+                    borderTop: "1px dashed #cbd5e1",
+                  }}
+                >
+                  <em>You have reached the end of the document.</em>
+                </p>
+              </div>
             </div>
+
             <div style={{ marginTop: "20px", flexShrink: 0 }}>
               <button
                 type="button"
                 className="auth-submit-btn"
+                disabled={!hasScrolledToBottom}
                 onClick={() => setSignupStep("id-select")}
-                style={{ backgroundColor: "#16a34a" }}
+                style={{
+                  backgroundColor: "#16a34a",
+                  opacity: hasScrolledToBottom ? 1 : 0.4,
+                  cursor: hasScrolledToBottom ? "pointer" : "not-allowed",
+                  transition: "opacity 0.3s ease",
+                  textTransform: "uppercase",
+                }}
               >
                 I Agree & Proceed
               </button>

@@ -13,8 +13,10 @@ const base64ToBlob = (base64, mimeType = "image/jpeg") => {
   return new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
 };
 
+// 🌟 ADDED `className="force-hide-nav"` to this wrapper so the keyboard listener never restores the nav bar here!
 const FullScreenWrapper = ({ title, onBack, isDark, children }) => (
   <div
+    className="force-hide-nav"
     style={{
       position: "fixed",
       top: 0,

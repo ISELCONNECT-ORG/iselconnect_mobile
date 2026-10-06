@@ -32,8 +32,14 @@ function App() {
 
     // Show the navigation bar when the keyboard closes
     const showNav = () => {
-      const navBar = document.querySelector(".bottom-nav-wrapper");
-      if (navBar) navBar.style.display = "";
+      // 🌟 NEW: Check if the current full-screen overlay wants to force-hide the nav
+      const isOverlayActive = document.querySelector(".force-hide-nav");
+
+      // Only restore the navigation bar if there is NO overlay active
+      if (!isOverlayActive) {
+        const navBar = document.querySelector(".bottom-nav-wrapper");
+        if (navBar) navBar.style.display = "";
+      }
     };
 
     // Listen for Capacitor Keyboard events

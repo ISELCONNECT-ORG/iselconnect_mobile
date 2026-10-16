@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   CreditCard,
   ChevronDown,
+  AlertCircle,
 } from "lucide-react";
 import logo from "../assets/ISELCONNECT.png";
 import { logSystemAction } from "../utils/logger";
@@ -37,6 +38,31 @@ const validatePassword = (password) => {
   return null;
 };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// --- INLINE FIELD ERROR ---
+const FieldError = ({ message }) =>
+  message ? (
+    <div
+      role="alert"
+      style={{
+        marginBottom: "6px",
+        padding: "5px 10px",
+        backgroundColor: "#fef2f2",
+        color: "#b91c1c",
+        borderRadius: "8px",
+        fontSize: "0.78rem",
+        fontWeight: "600",
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+      }}
+    >
+      <AlertCircle size={14} style={{ flexShrink: 0 }} />
+      {message}
+    </div>
+  ) : null;
+
 // --- SEARCHABLE DROPDOWN COMPONENT ---
 const SearchableDropdown = ({
   options,
@@ -45,6 +71,7 @@ const SearchableDropdown = ({
   placeholder,
   disabled,
   name,
+  hasError,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -87,6 +114,7 @@ const SearchableDropdown = ({
           width: "100%",
           boxSizing: "border-box",
           padding: "14px 20px",
+          ...(hasError ? { border: "2px solid #ef4444" } : {}),
         }}
         placeholder={placeholder}
         value={displayValue}
@@ -171,6 +199,8 @@ function SignUp({ onBack }) {
   const [signupStep, setSignupStep] = useState("privacy");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+  const formRef = useRef(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
@@ -257,6 +287,13 @@ function SignUp({ onBack }) {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    setFieldErrors((prev) => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      if (name === "municipality_id") delete next.barangay_id;
+      return next;
+    });
     setFormData((prev) => {
       const newData = { ...prev, [name]: value };
       if (name === "municipality_id") newData.barangay_id = "";
@@ -287,19 +324,64 @@ function SignUp({ onBack }) {
     setSignupStep("form");
   };
 
+  // Returns { fieldName: "message" } in the same order the fields appear on screen
+  const validateForm = () => {
+    const errors = {};
+    if (!formData.idNumber.trim())
+      errors.idNumber = "Please enter your ID Number.";
+    if (!formData.firstName.trim())
+      errors.firstName = "Please enter your First Name.";
+    if (!formData.lastName.trim())
+      errors.lastName = "Please enter your Last Name.";
+    if (!formData.municipality_id)
+      errors.municipality_id = "Please select your Municipality.";
+    if (isOtherMunicipality && !formData.otherLocation.trim())
+      errors.otherLocation = "Please enter your City / Province.";
+    if (
+      formData.municipality_id &&
+      !isOtherMunicipality &&
+      !formData.barangay_id
+    )
+      errors.barangay_id = "Please select your Barangay.";
+    if (!formData.mobileNumber.trim())
+      errors.mobileNumber = "Please enter your Mobile Number.";
+    if (!formData.email.trim()) errors.email = "Please enter your Email.";
+    else if (!EMAIL_REGEX.test(formData.email.trim()))
+      errors.email = "Please enter a valid email address.";
+    if (!formData.password) errors.password = "Please enter a Password.";
+    else {
+      const passwordError = validatePassword(formData.password);
+      if (passwordError) errors.password = passwordError;
+    }
+    return errors;
+  };
+
+  const focusField = (fieldName) => {
+    // wait for the error state to render, then jump to the field
+    setTimeout(() => {
+      const el = formRef.current?.querySelector(`[name="${fieldName}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus({ preventScroll: true });
+      }
+    }, 0);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setErrorMsg("");
 
-    try {
-      const passwordError = validatePassword(formData.password);
-      if (passwordError) throw new Error(passwordError);
-      if (isOtherMunicipality && !formData.otherLocation.trim())
-        throw new Error("Please provide your City / Province.");
-      if (!formData.idNumber.trim())
-        throw new Error("Please provide your ID Number.");
+    const errors = validateForm();
+    setFieldErrors(errors);
+    const firstInvalid = Object.keys(errors)[0];
+    if (firstInvalid) {
+      focusField(firstInvalid);
+      return;
+    }
 
+    setLoading(true);
+
+    try {
       const { data: existingEmail } = await supabase
         .from("users")
         .select("id")
@@ -307,9 +389,12 @@ function SignUp({ onBack }) {
         .maybeSingle();
 
       if (existingEmail) {
-        throw new Error(
-          "This email is already registered. Please use another email or log in instead.",
-        );
+        setFieldErrors({
+          email:
+            "This email is already registered. Use another email or log in instead.",
+        });
+        focusField("email");
+        return;
       }
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -320,9 +405,11 @@ function SignUp({ onBack }) {
       if (authError) throw authError;
 
       if (authData?.user?.identities && authData.user.identities.length === 0) {
-        throw new Error(
-          "This email is already registered. Please log in instead.",
-        );
+        setFieldErrors({
+          email: "This email is already registered. Please log in instead.",
+        });
+        focusField("email");
+        return;
       }
 
       if (!authData?.user?.id)
@@ -446,6 +533,11 @@ function SignUp({ onBack }) {
     else if (signupStep === "id-select") setSignupStep("privacy");
     else onBack();
   };
+
+  const inputStyle = (name) => ({
+    padding: "14px 20px",
+    ...(fieldErrors[name] ? { border: "2px solid #ef4444" } : {}),
+  });
 
   const hasLength = formData.password.length >= 8;
   const hasLetter = /[a-zA-Z]/.test(formData.password);
@@ -831,6 +923,8 @@ function SignUp({ onBack }) {
         {/* STEP 5: MAIN REGISTRATION FORM */}
         {signupStep === "form" && (
           <form
+            ref={formRef}
+            noValidate
             onSubmit={handleSubmit}
             style={{
               display: "flex",
@@ -847,28 +941,28 @@ function SignUp({ onBack }) {
               }}
             >
               <div className="auth-input-group">
+                <FieldError message={fieldErrors.idNumber} />
                 <input
                   type="text"
                   name="idNumber"
                   placeholder="ID Number"
                   value={formData.idNumber}
                   onChange={handleInputChange}
-                  required
                   className="auth-input"
-                  style={{ padding: "14px 20px" }}
+                  style={inputStyle("idNumber")}
                 />
               </div>
 
               <div className="auth-input-group">
+                <FieldError message={fieldErrors.firstName} />
                 <input
                   type="text"
                   name="firstName"
                   placeholder="First Name"
                   value={formData.firstName}
                   onChange={handleInputChange}
-                  required
                   className="auth-input"
-                  style={{ padding: "14px 20px" }}
+                  style={inputStyle("firstName")}
                 />
               </div>
 
@@ -885,44 +979,47 @@ function SignUp({ onBack }) {
               </div>
 
               <div className="auth-input-group">
+                <FieldError message={fieldErrors.lastName} />
                 <input
                   type="text"
                   name="lastName"
                   placeholder="Last Name"
                   value={formData.lastName}
                   onChange={handleInputChange}
-                  required
                   className="auth-input"
-                  style={{ padding: "14px 20px" }}
+                  style={inputStyle("lastName")}
                 />
               </div>
 
               <div className="auth-input-group">
+                <FieldError message={fieldErrors.municipality_id} />
                 <SearchableDropdown
                   name="municipality_id"
                   options={municipalities}
                   value={formData.municipality_id}
                   onChange={handleInputChange}
                   placeholder="Municipality"
+                  hasError={!!fieldErrors.municipality_id}
                 />
               </div>
 
               {isOtherMunicipality && (
                 <div className="auth-input-group">
+                  <FieldError message={fieldErrors.otherLocation} />
                   <input
                     type="text"
                     name="otherLocation"
                     placeholder="City / Province"
                     value={formData.otherLocation}
                     onChange={handleInputChange}
-                    required
                     className="auth-input"
-                    style={{ padding: "14px 20px" }}
+                    style={inputStyle("otherLocation")}
                   />
                 </div>
               )}
 
               <div className="auth-input-group">
+                <FieldError message={fieldErrors.barangay_id} />
                 <SearchableDropdown
                   name="barangay_id"
                   options={barangays}
@@ -934,6 +1031,7 @@ function SignUp({ onBack }) {
                       : "Barangay"
                   }
                   disabled={!formData.municipality_id || isOtherMunicipality}
+                  hasError={!!fieldErrors.barangay_id}
                 />
               </div>
 
@@ -950,32 +1048,33 @@ function SignUp({ onBack }) {
               </div>
 
               <div className="auth-input-group">
+                <FieldError message={fieldErrors.mobileNumber} />
                 <input
                   type="tel"
                   name="mobileNumber"
                   placeholder="Mobile Number"
                   value={formData.mobileNumber}
                   onChange={handleInputChange}
-                  required
                   className="auth-input"
-                  style={{ padding: "14px 20px" }}
+                  style={inputStyle("mobileNumber")}
                 />
               </div>
 
               <div className="auth-input-group">
+                <FieldError message={fieldErrors.email} />
                 <input
                   type="email"
                   name="email"
                   placeholder="Email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  required
                   className="auth-input"
-                  style={{ padding: "14px 20px" }}
+                  style={inputStyle("email")}
                 />
               </div>
 
               <div className="auth-input-group">
+                <FieldError message={fieldErrors.password} />
                 <div className="password-input-wrapper">
                   <input
                     type={showPassword ? "text" : "password"}
@@ -983,9 +1082,8 @@ function SignUp({ onBack }) {
                     placeholder="Password"
                     value={formData.password}
                     onChange={handleInputChange}
-                    required
                     className="auth-input"
-                    style={{ padding: "14px 20px" }}
+                    style={inputStyle("password")}
                   />
                   <button
                     type="button"

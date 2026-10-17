@@ -36,6 +36,29 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
+// --- INLINE FIELD ERROR ---
+const FieldError = ({ message }) =>
+  message ? (
+    <div
+      role="alert"
+      style={{
+        marginBottom: "6px",
+        padding: "5px 10px",
+        backgroundColor: "#fef2f2",
+        color: "#b91c1c",
+        borderRadius: "8px",
+        fontSize: "0.78rem",
+        fontWeight: "600",
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+      }}
+    >
+      <AlertCircle size={14} style={{ flexShrink: 0 }} />
+      {message}
+    </div>
+  ) : null;
+
 const SearchableDropdown = ({
   options,
   value,
@@ -43,6 +66,7 @@ const SearchableDropdown = ({
   placeholder,
   disabled,
   name,
+  hasError,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -86,6 +110,7 @@ const SearchableDropdown = ({
           cursor: disabled ? "not-allowed" : "text",
           width: "100%",
           boxSizing: "border-box",
+          ...(hasError ? { border: "2px solid #ef4444" } : {}),
         }}
         placeholder={placeholder}
         value={displayValue}
@@ -179,6 +204,7 @@ function ReportTab({ isActive }) {
   const [imagePreview, setImagePreview] = useState(null);
   const [coordinates, setCoordinates] = useState({ lat: "", lon: "" });
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
@@ -196,6 +222,7 @@ function ReportTab({ isActive }) {
   });
 
   const webcamRef = useRef(null);
+  const formContainerRef = useRef(null);
 
   const selectedReportTypeObj = reportTypes.find(
     (rt) => rt.id.toString() === formData.report_type_id.toString(),
@@ -400,6 +427,17 @@ function ReportTab({ isActive }) {
     autoFillAddress();
   }, [coordinates.lat, coordinates.lon, municipalities]);
 
+  // Auto-fill (GPS -> address) updates formData directly, so clear matching errors here
+  useEffect(() => {
+    setFieldErrors((prev) => {
+      if (!prev.municipality_id && !prev.barangay_id) return prev;
+      const next = { ...prev };
+      if (formData.municipality_id) delete next.municipality_id;
+      if (formData.barangay_id) delete next.barangay_id;
+      return next;
+    });
+  }, [formData.municipality_id, formData.barangay_id]);
+
   useEffect(() => {
     const navBar = document.querySelector(".bottom-nav-wrapper");
     if (isCameraOpen) {
@@ -414,6 +452,13 @@ function ReportTab({ isActive }) {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    setFieldErrors((prev) => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      if (name === "municipality_id") delete next.barangay_id;
+      return next;
+    });
     setFormData((prev) => {
       const newData = { ...prev, [name]: value };
       if (name === "municipality_id") newData.barangay_id = "";
@@ -427,6 +472,12 @@ function ReportTab({ isActive }) {
     setIsCameraOpen(false);
     setCoordinates({ lat: "Fetching...", lon: "Fetching..." });
     setError("");
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next.photo;
+      delete next.coordinates;
+      return next;
+    });
 
     try {
       let permissions = await Geolocation.checkPermissions();
@@ -471,24 +522,38 @@ function ReportTab({ isActive }) {
       return setError("Only verified accounts can submit reports.");
     }
 
-    if (!imagePreview) return setError("Please capture a photo of the issue.");
+    const errors = {};
+    if (!imagePreview) errors.photo = "Please capture a photo of the issue.";
     if (
       !coordinates.lat ||
       !coordinates.lon ||
       coordinates.lat === "Fetching..."
     )
-      return setError("Please wait for location coordinates to load.");
-    if (!formData.report_type_id)
-      return setError("Please select a Report Type.");
+      errors.coordinates = "Please wait for location coordinates to load.";
     if (!formData.municipality_id)
-      return setError("Please select a Municipality.");
-    if (!formData.barangay_id) return setError("Please select a Barangay.");
-    if (!formData.landmark.trim()) return setError("Please enter a Landmark.");
+      errors.municipality_id = "Please select a Municipality.";
+    if (!formData.barangay_id) errors.barangay_id = "Please select a Barangay.";
+    if (!formData.report_type_id)
+      errors.report_type_id = "Please select a Report Type.";
+    if (!formData.landmark.trim()) errors.landmark = "Please enter a Landmark.";
+    if (isOtherSelected && !formData.description.trim())
+      errors.description =
+        "Please describe the damage for Other / Not Specified issues.";
 
-    if (isOtherSelected && !formData.description.trim()) {
-      return setError(
-        "Please specify the damage description for Other/Not Specified issues.",
-      );
+    setFieldErrors(errors);
+    const firstInvalid = Object.keys(errors)[0];
+    if (firstInvalid) {
+      setError("");
+      setTimeout(() => {
+        const el = formContainerRef.current?.querySelector(
+          `[name="${firstInvalid}"], [data-field="${firstInvalid}"]`,
+        );
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          if (typeof el.focus === "function") el.focus({ preventScroll: true });
+        }
+      }, 0);
+      return;
     }
 
     // 🌟 THE SUPERVISOR'S RULE: Check distance and report type!
@@ -1186,11 +1251,13 @@ function ReportTab({ isActive }) {
           </div>
         </div>
       ) : !isCameraOpen ? (
-        <div className="report-form-container">
+        <div className="report-form-container" ref={formContainerRef}>
           <h1 className="report-title text-yellow">{t.reportTitle}</h1>
 
+          <FieldError message={fieldErrors.photo} />
           <div
             className="photo-capture-box"
+            data-field="photo"
             onClick={() => setIsCameraOpen(true)}
           >
             {imagePreview ? (
@@ -1226,14 +1293,19 @@ function ReportTab({ isActive }) {
           )}
 
           <div className="report-inputs">
+            <FieldError message={fieldErrors.coordinates} />
             <input
               type="text"
+              data-field="coordinates"
               className="rounded-input"
               placeholder={t.longitude}
               value={coordinates.lon}
               style={{
                 color:
                   coordinates.lon === "Fetching..." ? "#94a3b8" : "inherit",
+                ...(fieldErrors.coordinates
+                  ? { border: "2px solid #ef4444" }
+                  : {}),
               }}
               readOnly
             />
@@ -1246,18 +1318,24 @@ function ReportTab({ isActive }) {
               style={{
                 color:
                   coordinates.lat === "Fetching..." ? "#94a3b8" : "inherit",
+                ...(fieldErrors.coordinates
+                  ? { border: "2px solid #ef4444" }
+                  : {}),
               }}
               readOnly
             />
 
+            <FieldError message={fieldErrors.municipality_id} />
             <SearchableDropdown
               name="municipality_id"
               options={municipalities}
               value={formData.municipality_id}
               onChange={handleInputChange}
               placeholder={t.incidentMun}
+              hasError={!!fieldErrors.municipality_id}
             />
 
+            <FieldError message={fieldErrors.barangay_id} />
             <SearchableDropdown
               name="barangay_id"
               options={barangays}
@@ -1269,6 +1347,7 @@ function ReportTab({ isActive }) {
                   : t.incidentBrgy
               }
               disabled={!formData.municipality_id}
+              hasError={!!fieldErrors.barangay_id}
             />
 
             <input
@@ -1280,14 +1359,17 @@ function ReportTab({ isActive }) {
               onChange={handleInputChange}
             />
 
+            <FieldError message={fieldErrors.report_type_id} />
             <SearchableDropdown
               name="report_type_id"
               options={reportTypes}
               value={formData.report_type_id}
               onChange={handleInputChange}
               placeholder={t.reportType}
+              hasError={!!fieldErrors.report_type_id}
             />
 
+            <FieldError message={fieldErrors.landmark} />
             <input
               type="text"
               name="landmark"
@@ -1295,8 +1377,14 @@ function ReportTab({ isActive }) {
               placeholder={t.landmarkPlaceholder || "Landmark"}
               value={formData.landmark}
               onChange={handleInputChange}
+              style={
+                fieldErrors.landmark
+                  ? { border: "2px solid #ef4444" }
+                  : undefined
+              }
             />
 
+            <FieldError message={fieldErrors.description} />
             <input
               type="text"
               name="description"
@@ -1309,8 +1397,9 @@ function ReportTab({ isActive }) {
               value={formData.description}
               onChange={handleInputChange}
               style={{
-                border:
-                  isOtherSelected && !formData.description.trim()
+                border: fieldErrors.description
+                  ? "2px solid #ef4444"
+                  : isOtherSelected && !formData.description.trim()
                     ? "2px solid #f59e0b"
                     : "none",
               }}

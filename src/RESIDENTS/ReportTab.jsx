@@ -15,6 +15,7 @@ import {
   AlertCircle,
   XOctagon,
   ArrowRight,
+  Globe,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
@@ -36,25 +37,47 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
+// 🌟 ANTI-VPN & SERVICE AREA BOUNDING BOX (Isabela / ISELCO-1 Franchise Area)
+const ISABELA_BOUNDS = {
+  minLat: 16.3,
+  maxLat: 17.6,
+  minLon: 121.25,
+  maxLon: 122.5,
+};
+
+// Maximum allowed GPS accuracy radius (in meters) to reject IP/VPN network location fallbacks
+const MAX_ACCEPTABLE_ACCURACY_METERS = 250;
+
+const isWithinServiceArea = (lat, lon) => {
+  const numLat = parseFloat(lat);
+  const numLon = parseFloat(lon);
+  if (isNaN(numLat) || isNaN(numLon)) return false;
+  return (
+    numLat >= ISABELA_BOUNDS.minLat &&
+    numLat <= ISABELA_BOUNDS.maxLat &&
+    numLon >= ISABELA_BOUNDS.minLon &&
+    numLon <= ISABELA_BOUNDS.maxLon
+  );
+};
+
 // --- INLINE FIELD ERROR ---
-const FieldError = ({ message }) =>
+// Pink tab that sits behind the top of the input; the input overlaps its lower edge.
+const FieldError = ({ message, overlap = true }) =>
   message ? (
     <div
       role="alert"
       style={{
-        marginBottom: "6px",
-        padding: "5px 10px",
-        backgroundColor: "#fef2f2",
-        color: "#b91c1c",
-        borderRadius: "8px",
+        backgroundColor: "#ffb3b3",
+        color: "#e00000",
+        borderRadius: overlap ? "26px 26px 0 0" : "14px",
+        padding: overlap ? "9px 22px 30px" : "10px 16px",
+        marginBottom: overlap ? "-20px" : "8px",
         fontSize: "0.78rem",
         fontWeight: "600",
-        display: "flex",
-        alignItems: "center",
-        gap: "6px",
+        lineHeight: "1.3",
+        textAlign: "left",
       }}
     >
-      <AlertCircle size={14} style={{ flexShrink: 0 }} />
       {message}
     </div>
   ) : null;
@@ -101,6 +124,13 @@ const SearchableDropdown = ({
       ref={dropdownRef}
       style={{ position: "relative", width: "100%", marginBottom: "0px" }}
     >
+      <style>{`
+        @keyframes dropdownSlide {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
       <input
         type="text"
         name={name}
@@ -110,7 +140,7 @@ const SearchableDropdown = ({
           cursor: disabled ? "not-allowed" : "text",
           width: "100%",
           boxSizing: "border-box",
-          ...(hasError ? { border: "2px solid #ef4444" } : {}),
+          ...(hasError ? { border: "1px solid #ff0000" } : {}),
         }}
         placeholder={placeholder}
         value={displayValue}
@@ -122,17 +152,32 @@ const SearchableDropdown = ({
         disabled={disabled}
         autoComplete="off"
       />
+
       <div
+        onClick={(e) => {
+          if (!disabled) {
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }
+        }}
         style={{
           position: "absolute",
           right: "15px",
           top: "25px",
-          transform: "translateY(-50%)",
-          pointerEvents: "none",
+          transform: isOpen
+            ? "translateY(-50%) rotate(180deg)"
+            : "translateY(-50%) rotate(0deg)",
+          transition: "transform 0.3s ease",
+          cursor: disabled ? "not-allowed" : "pointer",
+          zIndex: 10,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         <ChevronDown size={20} color="#64748b" />
       </div>
+
       {isOpen && (
         <div
           style={{
@@ -149,6 +194,8 @@ const SearchableDropdown = ({
             boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
             marginTop: "5px",
             padding: "5px",
+            animation: "dropdownSlide 0.2s ease-out forwards",
+            transformOrigin: "top center",
           }}
         >
           {filteredOptions.length > 0 ? (
@@ -270,7 +317,6 @@ function ReportTab({ isActive }) {
             setVerificationStatus("pending");
           }
 
-          // 🌟 UPDATED: Fetched `report_type_id` so we can compare damage types!
           const { data: reportsData, error: reportsError } = await supabase
             .from("reports")
             .select(
@@ -366,6 +412,23 @@ function ReportTab({ isActive }) {
         const data = await res.json();
 
         if (data && data.address) {
+          // 🌟 Secondary VPN Check: Verify LocationIQ resolved inside the Philippines
+          if (
+            data.address.country_code &&
+            data.address.country_code.toLowerCase() !== "ph"
+          ) {
+            setImagePreview(null);
+            setCoordinates({ lat: "", lon: "" });
+            setFieldErrors((prev) => ({
+              ...prev,
+              coordinates: "Foreign IP Detected.",
+            }));
+            setError(
+              "Foreign location detected. Please disable any active VPN and recapture the photo using your device's physical GPS.",
+            );
+            return;
+          }
+
           const addressValues = Object.values(data.address).map((v) =>
             typeof v === "string" ? v.toLowerCase() : "",
           );
@@ -495,9 +558,41 @@ function ReportTab({ isActive }) {
         timeout: 20000,
       });
 
+      const { latitude, longitude, accuracy } = position.coords;
+
+      // 🌟 1. Block VPN / Foreign / Out-of-Province Coordinates
+      if (!isWithinServiceArea(latitude, longitude)) {
+        setImagePreview(null);
+        setCoordinates({ lat: "", lon: "" });
+        setFieldErrors((prev) => ({
+          ...prev,
+          coordinates: "Location blocked.",
+        }));
+        setError(
+          "Detected location is outside the ISELCO-1 service area. Please turn OFF any active VPN and ensure your device GPS is enabled before capturing.",
+        );
+        return;
+      }
+
+      // 🌟 2. Block Coarse IP/Network Fallback Coordinates (VPNs & Approximate Location)
+      if (accuracy && accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+        setImagePreview(null);
+        setCoordinates({ lat: "", lon: "" });
+        setFieldErrors((prev) => ({
+          ...prev,
+          coordinates: "Signal too weak.",
+        }));
+        setError(
+          `GPS signal is too inaccurate (±${Math.round(
+            accuracy,
+          )}m). Please disable any active VPN, enable 'Precise Location', and step outside.`,
+        );
+        return;
+      }
+
       setCoordinates({
-        lat: position.coords.latitude.toFixed(6),
-        lon: position.coords.longitude.toFixed(6),
+        lat: latitude.toFixed(6),
+        lon: longitude.toFixed(6),
       });
     } catch (err) {
       console.error("Location access failed:", err);
@@ -524,12 +619,21 @@ function ReportTab({ isActive }) {
 
     const errors = {};
     if (!imagePreview) errors.photo = "Please capture a photo of the issue.";
+
     if (
       !coordinates.lat ||
       !coordinates.lon ||
       coordinates.lat === "Fetching..."
-    )
+    ) {
       errors.coordinates = "Please wait for location coordinates to load.";
+    } else if (!isWithinServiceArea(coordinates.lat, coordinates.lon)) {
+      // 🌟 Final submission safety check against VPN coordinates
+      errors.coordinates = "Location must be within Isabela.";
+      setError(
+        "Invalid location coordinates detected outside the ISELCO-1 service area. Please turn off your VPN and retake the photo.",
+      );
+    }
+
     if (!formData.municipality_id)
       errors.municipality_id = "Please select a Municipality.";
     if (!formData.barangay_id) errors.barangay_id = "Please select a Barangay.";
@@ -543,7 +647,10 @@ function ReportTab({ isActive }) {
     setFieldErrors(errors);
     const firstInvalid = Object.keys(errors)[0];
     if (firstInvalid) {
-      setError("");
+      // Do not clear overall error if it's the custom VPN error
+      if (firstInvalid !== "coordinates" || !error.includes("VPN")) {
+        setError("");
+      }
       setTimeout(() => {
         const el = formContainerRef.current?.querySelector(
           `[name="${firstInvalid}"], [data-field="${firstInvalid}"]`,
@@ -1057,8 +1164,53 @@ function ReportTab({ isActive }) {
                       lineHeight: "1.4",
                     }}
                   >
-                    Ensure your device GPS is turned on before capturing a photo
-                    so linemen can locate the issue precisely.
+                    Ensure your device GPS is turned on and VPNs are disabled
+                    before capturing a photo so linemen can locate the issue
+                    precisely.
+                  </p>
+                </div>
+              </div>
+
+              {/* 🌟 NEW: Disable VPNs Guideline */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  alignItems: "flex-start",
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: "#fce7f3",
+                    padding: "8px",
+                    borderRadius: "50%",
+                  }}
+                >
+                  <Globe size={20} color="#db2777" />
+                </div>
+                <div>
+                  <h3
+                    style={{
+                      margin: "0 0 4px 0",
+                      color: "#1e293b",
+                      fontSize: "0.9rem",
+                      fontWeight: "900",
+                    }}
+                  >
+                    Disable VPNs
+                  </h3>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#475569",
+                      fontSize: "0.75rem",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    Please turn off any active VPN on your device before
+                    reporting. VPNs will alter your coordinates, resulting in an
+                    inaccurate report location that will be automatically
+                    blocked by the system.
                   </p>
                 </div>
               </div>
@@ -1254,23 +1406,89 @@ function ReportTab({ isActive }) {
         <div className="report-form-container" ref={formContainerRef}>
           <h1 className="report-title text-yellow">{t.reportTitle}</h1>
 
-          <FieldError message={fieldErrors.photo} />
-          <div
-            className="photo-capture-box"
-            data-field="photo"
-            onClick={() => setIsCameraOpen(true)}
-          >
-            {imagePreview ? (
-              <img
-                src={imagePreview}
-                alt="Captured report"
-                className="captured-image-preview"
-              />
-            ) : (
-              <div className="placeholder-content">
-                <CameraIcon size={48} strokeWidth={1.5} color="#1b0b8c" />
-                <h2>{t.capturePhoto}</h2>
-              </div>
+          <div>
+            <FieldError message={fieldErrors.photo} overlap={false} />
+            <div
+              className="photo-capture-box"
+              data-field="photo"
+              onClick={() => setIsCameraOpen(true)}
+            >
+              {imagePreview ? (
+                <img
+                  src={imagePreview}
+                  alt="Captured report"
+                  className="captured-image-preview"
+                />
+              ) : (
+                <div className="placeholder-content">
+                  <CameraIcon size={48} strokeWidth={1.5} color="#1b0b8c" />
+                  <h2>{t.capturePhoto}</h2>
+                </div>
+              )}
+            </div>
+
+            {/* 🌟 INCIDENT GEO-TAG DISPLAY - ONLY VISIBLE AFTER PHOTO CAPTURE */}
+            {imagePreview && (
+              <>
+                <FieldError message={fieldErrors.coordinates} overlap={false} />
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    backgroundColor: "#ffffff",
+                    border: fieldErrors.coordinates
+                      ? "2px solid #ff0000"
+                      : "1px solid #e2e8f0",
+                    borderRadius: "15px",
+                    padding: "12px 16px",
+                    marginTop: "10px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                    width: "100%",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <div
+                    style={{
+                      marginRight: "15px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <MapPin size={28} color="#1b0b8c" strokeWidth={2} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span
+                      style={{
+                        fontSize: "0.85rem",
+                        fontWeight: "900",
+                        color: "#1e293b",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                      }}
+                    >
+                      Incident Geo-Tag
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.9rem",
+                        fontWeight: "700",
+                        marginTop: "2px",
+                        color:
+                          coordinates.lat && coordinates.lat !== "Fetching..."
+                            ? "#16a34a"
+                            : "#94a3b8",
+                      }}
+                    >
+                      {coordinates.lat === "Fetching..."
+                        ? "Acquiring GPS signal..."
+                        : coordinates.lat
+                          ? `LAT: ${coordinates.lat}, LON: ${coordinates.lon}`
+                          : "No coordinates captured"}
+                    </span>
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
@@ -1293,62 +1511,34 @@ function ReportTab({ isActive }) {
           )}
 
           <div className="report-inputs">
-            <FieldError message={fieldErrors.coordinates} />
-            <input
-              type="text"
-              data-field="coordinates"
-              className="rounded-input"
-              placeholder={t.longitude}
-              value={coordinates.lon}
-              style={{
-                color:
-                  coordinates.lon === "Fetching..." ? "#94a3b8" : "inherit",
-                ...(fieldErrors.coordinates
-                  ? { border: "2px solid #ef4444" }
-                  : {}),
-              }}
-              readOnly
-            />
+            <div>
+              <FieldError message={fieldErrors.municipality_id} />
+              <SearchableDropdown
+                name="municipality_id"
+                options={municipalities}
+                value={formData.municipality_id}
+                onChange={handleInputChange}
+                placeholder={t.incidentMun}
+                hasError={!!fieldErrors.municipality_id}
+              />
+            </div>
 
-            <input
-              type="text"
-              className="rounded-input"
-              placeholder={t.latitude}
-              value={coordinates.lat}
-              style={{
-                color:
-                  coordinates.lat === "Fetching..." ? "#94a3b8" : "inherit",
-                ...(fieldErrors.coordinates
-                  ? { border: "2px solid #ef4444" }
-                  : {}),
-              }}
-              readOnly
-            />
-
-            <FieldError message={fieldErrors.municipality_id} />
-            <SearchableDropdown
-              name="municipality_id"
-              options={municipalities}
-              value={formData.municipality_id}
-              onChange={handleInputChange}
-              placeholder={t.incidentMun}
-              hasError={!!fieldErrors.municipality_id}
-            />
-
-            <FieldError message={fieldErrors.barangay_id} />
-            <SearchableDropdown
-              name="barangay_id"
-              options={barangays}
-              value={formData.barangay_id}
-              onChange={handleInputChange}
-              placeholder={
-                !formData.municipality_id
-                  ? "Select Municipality first"
-                  : t.incidentBrgy
-              }
-              disabled={!formData.municipality_id}
-              hasError={!!fieldErrors.barangay_id}
-            />
+            <div>
+              <FieldError message={fieldErrors.barangay_id} />
+              <SearchableDropdown
+                name="barangay_id"
+                options={barangays}
+                value={formData.barangay_id}
+                onChange={handleInputChange}
+                placeholder={
+                  !formData.municipality_id
+                    ? "Select Municipality first"
+                    : t.incidentBrgy
+                }
+                disabled={!formData.municipality_id}
+                hasError={!!fieldErrors.barangay_id}
+              />
+            </div>
 
             <input
               type="text"
@@ -1359,51 +1549,57 @@ function ReportTab({ isActive }) {
               onChange={handleInputChange}
             />
 
-            <FieldError message={fieldErrors.report_type_id} />
-            <SearchableDropdown
-              name="report_type_id"
-              options={reportTypes}
-              value={formData.report_type_id}
-              onChange={handleInputChange}
-              placeholder={t.reportType}
-              hasError={!!fieldErrors.report_type_id}
-            />
+            <div>
+              <FieldError message={fieldErrors.report_type_id} />
+              <SearchableDropdown
+                name="report_type_id"
+                options={reportTypes}
+                value={formData.report_type_id}
+                onChange={handleInputChange}
+                placeholder={t.reportType}
+                hasError={!!fieldErrors.report_type_id}
+              />
+            </div>
 
-            <FieldError message={fieldErrors.landmark} />
-            <input
-              type="text"
-              name="landmark"
-              className="rounded-input"
-              placeholder={t.landmarkPlaceholder || "Landmark"}
-              value={formData.landmark}
-              onChange={handleInputChange}
-              style={
-                fieldErrors.landmark
-                  ? { border: "2px solid #ef4444" }
-                  : undefined
-              }
-            />
+            <div>
+              <FieldError message={fieldErrors.landmark} />
+              <input
+                type="text"
+                name="landmark"
+                className="rounded-input"
+                placeholder={t.landmarkPlaceholder || "Landmark"}
+                value={formData.landmark}
+                onChange={handleInputChange}
+                style={
+                  fieldErrors.landmark
+                    ? { border: "1px solid #ff0000" }
+                    : undefined
+                }
+              />
+            </div>
 
-            <FieldError message={fieldErrors.description} />
-            <input
-              type="text"
-              name="description"
-              className="rounded-input"
-              placeholder={
-                isOtherSelected
-                  ? "Describe the issue/damage (Required) *"
-                  : t.descOptional
-              }
-              value={formData.description}
-              onChange={handleInputChange}
-              style={{
-                border: fieldErrors.description
-                  ? "2px solid #ef4444"
-                  : isOtherSelected && !formData.description.trim()
-                    ? "2px solid #f59e0b"
-                    : "none",
-              }}
-            />
+            <div>
+              <FieldError message={fieldErrors.description} />
+              <input
+                type="text"
+                name="description"
+                className="rounded-input"
+                placeholder={
+                  isOtherSelected
+                    ? "Describe the issue/damage (Required) *"
+                    : t.descOptional
+                }
+                value={formData.description}
+                onChange={handleInputChange}
+                style={{
+                  border: fieldErrors.description
+                    ? "1px solid #ff0000"
+                    : isOtherSelected && !formData.description.trim()
+                      ? "2px solid #f59e0b"
+                      : "none",
+                }}
+              />
+            </div>
           </div>
 
           <button

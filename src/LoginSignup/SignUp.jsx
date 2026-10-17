@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   CreditCard,
   ChevronDown,
-  AlertCircle,
 } from "lucide-react";
 import logo from "../assets/ISELCONNECT.png";
 import { logSystemAction } from "../utils/logger";
@@ -46,24 +45,139 @@ const FieldError = ({ message }) =>
     <div
       role="alert"
       style={{
-        marginBottom: "6px",
-        padding: "5px 10px",
-        backgroundColor: "#fef2f2",
-        color: "#b91c1c",
-        borderRadius: "8px",
+        backgroundColor: "#ffb3b3",
+        color: "#e00000",
+        borderRadius: "26px 26px 0 0",
+        padding: "9px 22px 30px",
+        marginBottom: "-20px",
         fontSize: "0.78rem",
         fontWeight: "600",
-        display: "flex",
-        alignItems: "center",
-        gap: "6px",
+        lineHeight: "1.3",
+        textAlign: "left",
       }}
     >
-      <AlertCircle size={14} style={{ flexShrink: 0 }} />
       {message}
     </div>
   ) : null;
 
-// --- SEARCHABLE DROPDOWN COMPONENT ---
+// --- 🌟 NEW: SIMPLE DROPDOWN COMPONENT (For ID Selection) ---
+// Replaces the native <select> tag to allow for smooth animations
+const SimpleDropdown = ({ options, value, onChange, name }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} style={{ position: "relative", width: "100%" }}>
+      <style>{`
+        @keyframes dropdownSlide {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="auth-input"
+        style={{
+          cursor: "pointer",
+          width: "100%",
+          boxSizing: "border-box",
+          padding: "16px 40px 16px 20px", // Extra right padding for the chevron
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center", // Keeps the ID name centered like your screenshot
+          backgroundColor: "#ffffff",
+          fontWeight: "bold",
+          color: "#1b0b8c",
+          position: "relative",
+          userSelect: "none",
+        }}
+      >
+        {selectedOption ? selectedOption.label : "Select Valid ID"}
+
+        {/* Spinning Chevron */}
+        <div
+          style={{
+            position: "absolute",
+            right: "20px",
+            top: "50%",
+            transform: isOpen
+              ? "translateY(-50%) rotate(180deg)"
+              : "translateY(-50%) rotate(0deg)",
+            transition: "transform 0.3s ease",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <ChevronDown size={20} color="#1b0b8c" />
+        </div>
+      </div>
+
+      {/* Sliding Menu */}
+      {isOpen && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            backgroundColor: "#ffffff",
+            border: "2px solid #1b0b8c",
+            borderRadius: "15px",
+            maxHeight: "220px",
+            overflowY: "auto",
+            zIndex: 9999,
+            boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+            marginTop: "5px",
+            padding: "5px",
+            animation: "dropdownSlide 0.2s ease-out forwards",
+            transformOrigin: "top center",
+          }}
+        >
+          {options.map((opt) => (
+            <div
+              key={opt.value}
+              onClick={() => {
+                onChange({ target: { name, value: opt.value } });
+                setIsOpen(false);
+              }}
+              style={{
+                padding: "14px 15px",
+                cursor: "pointer",
+                borderRadius: "10px",
+                color: "#1e293b",
+                textAlign: "center",
+                fontWeight:
+                  selectedOption?.value === opt.value ? "bold" : "normal",
+                backgroundColor:
+                  selectedOption?.value === opt.value
+                    ? "#f1f5f9"
+                    : "transparent",
+              }}
+            >
+              {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- SEARCHABLE DROPDOWN COMPONENT (For Municipalities/Barangays) ---
 const SearchableDropdown = ({
   options,
   value,
@@ -104,6 +218,13 @@ const SearchableDropdown = ({
 
   return (
     <div ref={dropdownRef} style={{ position: "relative", width: "100%" }}>
+      <style>{`
+        @keyframes dropdownSlide {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
       <input
         type="text"
         name={name}
@@ -114,7 +235,7 @@ const SearchableDropdown = ({
           width: "100%",
           boxSizing: "border-box",
           padding: "14px 20px",
-          ...(hasError ? { border: "2px solid #ef4444" } : {}),
+          ...(hasError ? { border: "1px solid #ff0000" } : {}),
         }}
         placeholder={placeholder}
         value={displayValue}
@@ -124,20 +245,34 @@ const SearchableDropdown = ({
         }}
         onClick={() => !disabled && setIsOpen(true)}
         disabled={disabled}
-        // 🌟 FIXED: Using "new-password" blocks mobile browsers from aggressively auto-filling emails here
         autoComplete="new-password"
       />
+
       <div
+        onClick={(e) => {
+          if (!disabled) {
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }
+        }}
         style={{
           position: "absolute",
           right: "15px",
           top: "50%",
-          transform: "translateY(-50%)",
-          pointerEvents: "none",
+          transform: isOpen
+            ? "translateY(-50%) rotate(180deg)"
+            : "translateY(-50%) rotate(0deg)",
+          transition: "transform 0.3s ease",
+          cursor: disabled ? "not-allowed" : "pointer",
+          zIndex: 10,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         <ChevronDown size={20} color="#1b0b8c" />
       </div>
+
       {isOpen && (
         <div
           style={{
@@ -154,6 +289,8 @@ const SearchableDropdown = ({
             boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
             marginTop: "5px",
             padding: "5px",
+            animation: "dropdownSlide 0.2s ease-out forwards",
+            transformOrigin: "top center",
           }}
         >
           {filteredOptions.length > 0 ? (
@@ -227,6 +364,15 @@ function SignUp({ onBack }) {
 
   const [capturedIdImage, setCapturedIdImage] = useState(null);
   const [capturedSelfieImage, setCapturedSelfieImage] = useState(null);
+
+  // ID Types for the SimpleDropdown
+  const idOptions = [
+    { value: "PhilID", label: "National ID (PhilSys)" },
+    { value: "DriverLicense", label: "Driver's License" },
+    { value: "UMID", label: "UMID" },
+    { value: "Passport", label: "Passport" },
+    { value: "Postal", label: "Postal ID" },
+  ];
 
   useEffect(() => {
     if (showSuccessModal) document.body.style.overflow = "hidden";
@@ -313,7 +459,6 @@ function SignUp({ onBack }) {
       (m) => m.id.toString() === formData.municipality_id.toString(),
     )?.name === "Other / Outside Coverage Area";
 
-  // 🌟 FIXED: We receive the image, but we completely ignore parsedData to stop garbage text auto-filling
   const handleIdCaptured = (imageSrc, parsedData) => {
     setCapturedIdImage(imageSrc);
     setSignupStep("selfie-scan");
@@ -324,7 +469,6 @@ function SignUp({ onBack }) {
     setSignupStep("form");
   };
 
-  // Returns { fieldName: "message" } in the same order the fields appear on screen
   const validateForm = () => {
     const errors = {};
     if (!formData.idNumber.trim())
@@ -357,7 +501,6 @@ function SignUp({ onBack }) {
   };
 
   const focusField = (fieldName) => {
-    // wait for the error state to render, then jump to the field
     setTimeout(() => {
       const el = formRef.current?.querySelector(`[name="${fieldName}"]`);
       if (el) {
@@ -536,7 +679,7 @@ function SignUp({ onBack }) {
 
   const inputStyle = (name) => ({
     padding: "14px 20px",
-    ...(fieldErrors[name] ? { border: "2px solid #ef4444" } : {}),
+    ...(fieldErrors[name] ? { border: "1px solid #ff0000" } : {}),
   });
 
   const hasLength = formData.password.length >= 8;
@@ -838,7 +981,7 @@ function SignUp({ onBack }) {
           </div>
         )}
 
-        {/* STEP 2: SELECT ID TYPE */}
+        {/* 🌟 UPDATED STEP 2: SELECT ID TYPE USING NEW SimpleDropdown */}
         {signupStep === "id-select" && (
           <div
             style={{
@@ -884,19 +1027,12 @@ function SignUp({ onBack }) {
               </p>
 
               <div className="auth-input-group" style={{ width: "100%" }}>
-                <select
+                <SimpleDropdown
                   name="idType"
+                  options={idOptions}
                   value={formData.idType}
                   onChange={handleInputChange}
-                  className="auth-input"
-                  style={{ textAlign: "center", fontWeight: "bold" }}
-                >
-                  <option value="PhilID">National ID (PhilSys)</option>
-                  <option value="DriverLicense">Driver's License</option>
-                  <option value="UMID">UMID</option>
-                  <option value="Passport">Passport</option>
-                  <option value="Postal">Postal ID</option>
-                </select>
+                />
               </div>
             </div>
             <div style={{ marginTop: "20px", flexShrink: 0 }}>

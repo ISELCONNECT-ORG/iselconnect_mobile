@@ -5,6 +5,7 @@ import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { TextRecognition, Script } from "@capacitor-mlkit/text-recognition";
 import { createWorker } from "tesseract.js";
+import jsQR from "jsqr"; // 🌟 NEW: The lightweight QR scanner
 
 export default function IdVerification({
   step,
@@ -18,30 +19,95 @@ export default function IdVerification({
   const [isSuccess, setIsSuccess] = useState(false);
   const [frozenImage, setFrozenImage] = useState(null);
 
+  // 🌟 NEW: Internal state to handle the 2-step National ID flow
+  const [philIdPhase, setPhilIdPhase] = useState("front");
+  const [frontImage, setFrontImage] = useState(null);
+
   const isProcessingRef = useRef(false);
   const intervalRef = useRef(null);
 
   const [focusPoint, setFocusPoint] = useState({ x: 0, y: 0 });
   const [showFocusRing, setShowFocusRing] = useState(false);
 
-  // 🌟 STREAMLINED PARSER: Strictly scans for ID Numbers only. Ignores all names.
+  // --- 🌟 1. PHILIPPINE NATIONAL ID QR DECODER ---
+  const processQRImage = async (imageSrc) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        canvas.width = img.width;
+        canvas.height = img.height;
+        context.drawImage(img, 0, 0, img.width, img.height);
+        const imageData = context.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        );
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        resolve(code ? code.data : null);
+      };
+      img.onerror = () => resolve(null);
+      img.src = imageSrc;
+    });
+  };
+
+  const parsePhilSysQR = (qrData) => {
+    let payloadStr = qrData;
+    if (qrData.split(".").length === 3) {
+      try {
+        let base64 = qrData.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        const pad = base64.length % 4;
+        if (pad) base64 += new Array(5 - pad).join("=");
+        payloadStr = decodeURIComponent(escape(atob(base64)));
+      } catch (e) {}
+    }
+
+    try {
+      const payload = JSON.parse(payloadStr);
+      const subj = payload.subject || payload;
+      const toTitleCase = (str) => {
+        if (!str) return "";
+        return str
+          .toLowerCase()
+          .split(" ")
+          .map((w) =>
+            w
+              .split("-")
+              .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+              .join("-"),
+          )
+          .join(" ")
+          .trim();
+      };
+
+      return {
+        idNumber: subj.PCN || "",
+        firstName: toTitleCase(subj.fName || subj.firstName || ""),
+        middleName: toTitleCase(subj.mName || subj.middleName || ""),
+        lastName: toTitleCase(subj.lName || subj.lastName || ""),
+      };
+    } catch (e) {
+      return {};
+    }
+  };
+
+  // --- 🌟 2. DRIVER'S LICENSE / FRONT ID NUMBER OCR ---
   const parseIDDetails = (text) => {
     const lines = text
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
-
     let extractedIdNum = "";
 
     for (const line of lines) {
-      // Fix common OCR zero/one mistakes
       const cleanLineNumbers = line
         .replace(/O/g, "0")
         .replace(/o/g, "0")
         .replace(/l/g, "1")
         .replace(/I/g, "1");
 
-      // Look for 12-digit National ID (XXXX-XXXX-XXXX-XXXX)
       const philSysMatch = cleanLineNumbers.match(
         /\b(\d{4})[-\s_~]*(\d{4})[-\s_~]*(\d{4})[-\s_~]*(\d{4})\b/,
       );
@@ -50,7 +116,6 @@ export default function IdVerification({
         break;
       }
 
-      // Look for UMID (XXXX-XXXXXXX-X)
       const umidMatch = cleanLineNumbers.match(
         /\b(\d{4})[-\s_~]*(\d{7})[-\s_~]*(\d{1})\b/,
       );
@@ -59,7 +124,6 @@ export default function IdVerification({
         break;
       }
 
-      // Look for Driver's License (XXX-XX-XXXXXX)
       const driverMatch = cleanLineNumbers.match(
         /\b([A-Z0-9]{3})[-\s_~]*(\d{2})[-\s_~]*(\d{6})\b/i,
       );
@@ -68,7 +132,6 @@ export default function IdVerification({
         break;
       }
     }
-
     return { idNumber: extractedIdNum };
   };
 
@@ -76,9 +139,13 @@ export default function IdVerification({
     const isAutoScan = idType === "PhilID" || idType === "DriverLicense";
 
     if (step === "id-scan" && isAutoScan) {
-      setScanFeedback("Scanning automatically...");
-      setIsSuccess(false);
-      setFrozenImage(null);
+      // Reset state on initial load
+      if (idType !== "PhilID" || philIdPhase === "front") {
+        setScanFeedback("Scanning automatically...");
+        setIsSuccess(false);
+        setFrozenImage(null);
+      }
+
       isProcessingRef.current = false;
 
       intervalRef.current = setInterval(async () => {
@@ -91,25 +158,53 @@ export default function IdVerification({
           return;
         }
 
+        // 🌟 PHASE 2: SCAN BACK OF NATIONAL ID (QR)
+        if (idType === "PhilID" && philIdPhase === "back") {
+          try {
+            const qrText = await processQRImage(imageSrc);
+            if (qrText) {
+              const parsedData = parsePhilSysQR(qrText);
+
+              if (parsedData.idNumber) {
+                clearInterval(intervalRef.current);
+                setIsSuccess(true);
+                setFrozenImage(imageSrc); // Freeze on the QR code for effect
+                setScanFeedback("QR Code Verified!");
+
+                setTimeout(() => {
+                  // Passes the FRONT image to be saved, but the perfect QR data for the form
+                  onIdCaptured(frontImage, parsedData);
+                }, 1500);
+              } else {
+                setScanFeedback("Align QR Code...");
+                isProcessingRef.current = false;
+              }
+            } else {
+              isProcessingRef.current = false;
+            }
+          } catch (err) {
+            console.error("QR Scan Error:", err);
+            isProcessingRef.current = false;
+          }
+          return;
+        }
+
+        // 🌟 PHASE 1: SCAN FRONT OF ID (OCR for ID Number)
         try {
           let text = "";
-
           if (Capacitor.isNativePlatform()) {
             const base64Data = imageSrc.split(",")[1];
             const fileName = `temp_id_${Date.now()}.jpeg`;
-
             const savedFile = await Filesystem.writeFile({
               path: fileName,
               data: base64Data,
               directory: Directory.Cache,
             });
-
             const result = await TextRecognition.processImage({
               path: savedFile.uri,
               script: Script.Latin,
             });
             text = result.text;
-
             await Filesystem.deleteFile({
               path: fileName,
               directory: Directory.Cache,
@@ -123,25 +218,31 @@ export default function IdVerification({
 
           const parsedData = parseIDDetails(text);
 
-          // 🌟 FAST SUCCESS TRIGGER: Stops as soon as the ID number is found
           if (parsedData.idNumber) {
-            clearInterval(intervalRef.current);
-            setIsSuccess(true);
+            if (idType === "PhilID") {
+              // National ID: Front Captured -> Transition to Back QR Scan
+              setFrontImage(imageSrc);
+              setPhilIdPhase("back");
+              setScanFeedback("Front Captured! Flip to scan QR Code.");
+              // Don't clear interval, it will automatically switch to the QR scanner logic above
+              isProcessingRef.current = false;
+            } else {
+              // Driver's License: Front Captured -> Finished
+              clearInterval(intervalRef.current);
+              setIsSuccess(true);
+              setFrozenImage(imageSrc);
+              setScanFeedback(`ID Number Found: ${parsedData.idNumber}`);
 
-            const finalCapture = webcamRef.current.getScreenshot() || imageSrc;
-            setFrozenImage(finalCapture);
-            setScanFeedback(`ID Number Found: ${parsedData.idNumber}`);
-
-            setTimeout(() => {
-              // Pass ONLY the idNumber back to SignUp.jsx
-              onIdCaptured(finalCapture, parsedData);
-            }, 1500);
+              setTimeout(() => {
+                onIdCaptured(imageSrc, parsedData);
+              }, 1500);
+            }
           } else {
             setScanFeedback("Align ID to scan Number...");
             isProcessingRef.current = false;
           }
         } catch (err) {
-          console.error("Auto-Scan Error:", err);
+          console.error("OCR Scan Error:", err);
           isProcessingRef.current = false;
         }
       }, 1000);
@@ -153,7 +254,7 @@ export default function IdVerification({
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [step, idType, onIdCaptured]);
+  }, [step, idType, philIdPhase, frontImage, onIdCaptured]);
 
   const manualCapture = useCallback(() => {
     if (webcamRef.current) {
@@ -197,6 +298,7 @@ export default function IdVerification({
   };
 
   const isAutoScanMode = idType === "PhilID" || idType === "DriverLicense";
+  const isSquareBox = idType === "PhilID" && philIdPhase === "back"; // Changes targeting box to a square for QR
 
   if (step === "id-scan") {
     return (
@@ -216,8 +318,7 @@ export default function IdVerification({
           zIndex: 10,
         }}
       >
-        {/* 🌟 INACCURACY WARNING BANNER */}
-        {isAutoScanMode && (
+        {isAutoScanMode && idType === "DriverLicense" && (
           <div
             style={{
               padding: "10px 15px",
@@ -256,13 +357,15 @@ export default function IdVerification({
           }}
         >
           {isSuccess && <CheckCircle size={20} />}
-          {idType === "PhilID" && !isSuccess
+          {idType === "PhilID" && philIdPhase === "front"
             ? "Step 1: Align FRONT of National ID"
-            : idType === "DriverLicense" && !isSuccess
-              ? "Step 1: Align FRONT of Driver's License"
-              : !isSuccess
-                ? "Step 1: Take a clear photo of the FRONT of your ID"
-                : scanFeedback}
+            : idType === "PhilID" && philIdPhase === "back"
+              ? "Step 2: Scan QR Code on the BACK"
+              : idType === "DriverLicense" && !isSuccess
+                ? "Step 1: Align FRONT of Driver's License"
+                : !isSuccess
+                  ? "Step 1: Take a clear photo of the FRONT of your ID"
+                  : scanFeedback}
         </div>
 
         {isAutoScanMode && !isSuccess && (
@@ -330,14 +433,14 @@ export default function IdVerification({
               top: "45%",
               left: "50%",
               transform: "translate(-50%, -50%)",
-              width: "85%",
-              height: "220px",
+              width: isSquareBox ? "250px" : "85%", // 🌟 Adapts: Rectangle for front, Square for QR
+              height: isSquareBox ? "250px" : "220px",
               border: `3px solid ${isSuccess ? "#4ade80" : "rgba(16, 185, 129, 0.8)"}`,
               borderRadius: "12px",
               boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.75)",
               pointerEvents: "none",
               overflow: "hidden",
-              transition: "border-color 0.3s",
+              transition: "all 0.3s ease",
             }}
           >
             {isAutoScanMode && !isSuccess && (

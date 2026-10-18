@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
 import ReportTab from "./LinemanReportTab";
 import HistoryTab from "./LinemanHistoryTab";
 import NotificationTab from "./LinemanNotificationTab";
 import ProfileTab from "./LinemanProfileTab";
-import ForcePasswordChange from "./ForcePasswordChange"; // 🌟 NEW: Import the forced password screen
+import ForcePasswordChange from "./ForcePasswordChange";
 import "../Lineman.css";
 
 import { List, Archive, Bell, User, Power } from "lucide-react";
@@ -21,8 +21,10 @@ function LinemanDashboard() {
   const [hasEmployeeRow, setHasEmployeeRow] = useState(true);
   const [showOffDutyConfirm, setShowOffDutyConfirm] = useState(false);
 
-  // 🌟 NEW: State to trigger the forced password change overlay
   const [needsPasswordChange, setNeedsPasswordChange] = useState(false);
+
+  // 🌟 NEW: State to track if there are unread notifications for the nav badge
+  const [hasUnreadNotifs, setHasUnreadNotifs] = useState(false);
 
   useEffect(() => {
     const fetchDutyStatus = async () => {
@@ -33,7 +35,6 @@ function LinemanDashboard() {
       if (user) {
         setUserId(user.id);
 
-        // 🌟 NEW: Added `is_first_login` to the select query
         const { data, error } = await supabase
           .from("employees")
           .select("duty_status, duty_start_time, duty_end_time, is_first_login")
@@ -50,7 +51,6 @@ function LinemanDashboard() {
           setDutyEndTime(data.duty_end_time);
           setHasEmployeeRow(true);
 
-          // 🌟 NEW: Check if this is their first login
           if (data.is_first_login) {
             setNeedsPasswordChange(true);
           }
@@ -63,6 +63,56 @@ function LinemanDashboard() {
 
     fetchDutyStatus();
   }, []);
+
+  // 🌟 NEW: Centralized function to check all unread notifications for Linemen
+  const checkUnreadStatus = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const readIds = JSON.parse(
+        localStorage.getItem("iselconnect_lineman_read_notifs") || "[]",
+      );
+
+      // Check Standard Notifications
+      const { data: standardNotifs } = await supabase
+        .from("notifications")
+        .select("id, is_read")
+        .eq("residents_id", user.id); // Identical mapping for Lineman
+
+      const hasUnread = standardNotifs?.some(
+        (n) => !n.is_read && !readIds.includes(String(n.id)),
+      );
+
+      setHasUnreadNotifs(!!hasUnread);
+    } catch (error) {
+      console.error("Error checking dashboard unread status:", error);
+    }
+  }, []);
+
+  // 🌟 NEW: Listen for Database changes AND local storage memory updates
+  useEffect(() => {
+    checkUnreadStatus();
+
+    const channel = supabase
+      .channel("public:lineman_dashboard_notifications")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications" },
+        checkUnreadStatus,
+      )
+      .subscribe();
+
+    // Lightweight poller to catch when local storage updates the "read" status across components
+    const memoryPoller = setInterval(checkUnreadStatus, 2000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(memoryPoller);
+    };
+  }, [checkUnreadStatus]);
 
   const handleDutyClick = () => {
     if (!userId || dutyStatus === "Loading...") return;
@@ -138,7 +188,6 @@ function LinemanDashboard() {
         position: "relative",
       }}
     >
-      {/* 🌟 NEW: Forced Password Change Overlay */}
       {needsPasswordChange && (
         <ForcePasswordChange onComplete={() => setNeedsPasswordChange(false)} />
       )}
@@ -253,14 +302,32 @@ function LinemanDashboard() {
             <span>Logs</span>
           </button>
 
+          {/* 🌟 UPDATED NOTIFICATION BUTTON WITH BLUE DOT INDICATOR */}
           <button
             className={`nav-item ${activeTab === "notification" ? "active" : ""}`}
             onClick={() => setActiveTab("notification")}
           >
-            <Bell
-              size={24}
-              strokeWidth={activeTab === "notification" ? 2.5 : 2}
-            />
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <Bell
+                size={24}
+                strokeWidth={activeTab === "notification" ? 2.5 : 2}
+              />
+              {hasUnreadNotifs && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "-2px",
+                    right: "0px",
+                    width: "12px",
+                    height: "12px",
+                    backgroundColor: "#1b0b8c",
+                    borderRadius: "50%",
+                    border: "2px solid #ffffff",
+                    zIndex: 10,
+                  }}
+                />
+              )}
+            </div>
             <span>Notifs</span>
           </button>
 

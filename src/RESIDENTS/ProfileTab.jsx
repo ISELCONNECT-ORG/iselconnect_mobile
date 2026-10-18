@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { createPortal } from "react-dom"; // <-- Added this!
+import { createPortal } from "react-dom";
 import { supabase } from "../supabaseClient";
 import { User, Edit, Settings, Save, X } from "lucide-react";
 import SettingsTab from "./SettingsTab";
@@ -150,6 +150,15 @@ function ProfileTab({ onLogout }) {
 
   const fullAddress = hasAddress ? addressParts.join(", ") : "None";
 
+  // 🌟 LOGIC CHECK: Are the current input fields different from the original database profile?
+  const hasChanges = profile
+    ? editData.first_name !== (profile.first_name || "") ||
+      editData.middle_name !== (profile.middle_name || "") ||
+      editData.last_name !== (profile.last_name || "") ||
+      editData.mobile_number !== (profile.mobile_number || "") ||
+      editData.purok_sitio !== (profile.purok_sitio || "")
+    : false;
+
   return (
     <div
       className="pt-container page-transition"
@@ -160,7 +169,7 @@ function ProfileTab({ onLogout }) {
         boxSizing: "border-box",
       }}
     >
-      {/* 1. CONFIRMATION MODAL - Teleported to document.body! */}
+      {/* 1. CONFIRMATION MODAL */}
       {showSaveModal &&
         createPortal(
           <div
@@ -204,7 +213,7 @@ function ProfileTab({ onLogout }) {
           document.body,
         )}
 
-      {/* 2. SUCCESS MODAL - Teleported to document.body! */}
+      {/* 2. SUCCESS MODAL */}
       {showSuccessModal &&
         createPortal(
           <div
@@ -383,9 +392,14 @@ function ProfileTab({ onLogout }) {
               <button
                 className="edit-save-btn"
                 onClick={() => setShowSaveModal(true)}
-                disabled={isSaving}
+                disabled={isSaving || !hasChanges} // 🌟 DISABLED WHEN NO CHANGES EXIST
+                style={{
+                  opacity: !hasChanges ? 0.5 : 1, // 🌟 FADES OUT BUTTON
+                  cursor: !hasChanges ? "not-allowed" : "pointer", // 🌟 PREVENTS CLICKING
+                  transition: "opacity 0.2s ease",
+                }}
               >
-                <Save size={18} /> {t.saveChangesBtn}
+                <Save size={18} /> SAVE
               </button>
             </div>
           </div>

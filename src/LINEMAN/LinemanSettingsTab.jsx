@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ChevronLeft, Info, LogOut } from "lucide-react";
+import { ChevronLeft, Info, LogOut, Globe } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
 import { translations } from "../components/translations";
@@ -13,8 +13,6 @@ function LinemanSettingsTab({ onBack, onLogout }) {
   const [language, setLanguage] = useState(savedLanguage);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showAboutUs, setShowAboutUs] = useState(false);
-
-  // 1. ADDED: New state to control the visibility of the Success Modal
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
   const handleSaveSettings = async () => {
@@ -23,7 +21,6 @@ function LinemanSettingsTab({ onBack, onLogout }) {
       "UPDATE_SETTINGS",
       `Lineman updated app settings (Language: ${language}).`,
     );
-    // 2. CHANGED: Instead of a browser alert, we trigger our custom modal!
     setShowSaveSuccess(true);
   };
 
@@ -47,19 +44,21 @@ function LinemanSettingsTab({ onBack, onLogout }) {
 
   return (
     <div
-      className="settings-page page-transition"
+      className="page-transition"
       style={{
-        height: "100%",
-        overflowY: "auto",
-        paddingBottom: "120px",
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
         boxSizing: "border-box",
+        padding: "18px 16px 100px 16px",
+        background: "linear-gradient(180deg, #ffffff 0%, #f4f6ff 100%)",
+        minHeight: "100%",
+        overflowY: "auto",
       }}
     >
-      {/* =========================================================
-          THE FIX: Custom Success Modal that reloads on "OK" click
-          ========================================================= */}
+      {/* SUCCESS MODAL */}
       {showSaveSuccess && (
-        <div className="modal-overlay">
+        <div className="modal-overlay" style={{ zIndex: 999999 }}>
           <div className="modal-box">
             <h3 className="modal-title" style={{ color: "#16a34a" }}>
               {language === "Tagalog" ? "TAGUMPAY" : "SUCCESS"}
@@ -69,7 +68,11 @@ function LinemanSettingsTab({ onBack, onLogout }) {
               <button
                 className="modal-btn confirm-btn"
                 onClick={() => window.location.reload()}
-                style={{ backgroundColor: "#1b0b8c", width: "100%" }}
+                style={{
+                  backgroundColor: "#1b0b8c",
+                  width: "100%",
+                  borderRadius: "50px",
+                }}
               >
                 OK
               </button>
@@ -78,9 +81,9 @@ function LinemanSettingsTab({ onBack, onLogout }) {
         </div>
       )}
 
-      {/* Existing Logout Modal */}
+      {/* LOGOUT MODAL */}
       {showLogoutModal && (
-        <div className="custom-alert-overlay">
+        <div className="custom-alert-overlay" style={{ zIndex: 999999 }}>
           <div className="custom-alert-box">
             <div className="custom-alert-header alert-header-danger">
               <h2>{t.signOutTitle}</h2>
@@ -107,70 +110,225 @@ function LinemanSettingsTab({ onBack, onLogout }) {
         </div>
       )}
 
-      <div className="settings-header-section">
-        <button className="back-btn" onClick={onBack}>
-          <ChevronLeft size={28} strokeWidth={3} />
+      {/* 🌟 NEW STICKY BLUR HEADER */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          margin: "-18px -16px 20px -16px",
+          padding: "22px 16px 18px 16px",
+          background: "rgba(255, 255, 255, 0.92)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          zIndex: 50,
+          borderBottom: "1px solid rgba(0,0,0,0.05)",
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+        }}
+      >
+        <button
+          onClick={onBack}
+          style={{
+            background: "none",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <ChevronLeft size={28} color="#1b0b8c" strokeWidth={2.5} />
         </button>
-        <h2>{t.settingsTitle}</h2>
+        <h2
+          style={{
+            color: "#1b0b8c",
+            margin: 0,
+            fontSize: "1.5rem",
+            fontWeight: "900",
+            letterSpacing: "1px",
+            textTransform: "uppercase",
+          }}
+        >
+          {t.settingsTitle}
+        </h2>
       </div>
 
-      <div className="settings-content-wrapper">
-        <div className="settings-card">
-          <h2 className="settings-card-title">{t.languages}</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* LANGUAGES CARD */}
+        <div>
           <h3
-            className="section-label"
             style={{
-              marginBottom: "10px",
+              fontSize: "0.85rem",
+              fontWeight: "800",
               color: "#64748b",
-              fontSize: "0.9rem",
+              textTransform: "uppercase",
+              letterSpacing: "1px",
+              margin: "0 0 10px 10px",
             }}
           >
-            {t.chooseLanguage}
+            {t.languages}
           </h3>
-          <select
-            className="language-select"
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: "16px",
+              padding: "20px",
+              boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+              border: "1px solid #f1f5f9",
+            }}
           >
-            <option value="English">English</option>
-            <option value="Tagalog">Tagalog</option>
-          </select>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                marginBottom: "12px",
+              }}
+            >
+              <Globe size={20} color="#1b0b8c" />
+              <span
+                style={{
+                  fontSize: "0.95rem",
+                  fontWeight: "700",
+                  color: "#1e293b",
+                }}
+              >
+                {t.chooseLanguage}
+              </span>
+            </div>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "14px 16px",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                fontSize: "1rem",
+                color: "#334155",
+                backgroundColor: "#f8fafc",
+                outline: "none",
+                fontWeight: "600",
+              }}
+            >
+              <option value="English">English</option>
+              <option value="Tagalog">Tagalog</option>
+            </select>
+          </div>
         </div>
 
-        <button className="settings-save-btn" onClick={handleSaveSettings}>
+        {/* SAVE BUTTON */}
+        <button
+          onClick={handleSaveSettings}
+          style={{
+            width: "100%",
+            padding: "16px",
+            borderRadius: "50px",
+            backgroundColor: "#1b0b8c",
+            color: "#ffffff",
+            fontWeight: "900",
+            fontSize: "1rem",
+            border: "none",
+            cursor: "pointer",
+            textTransform: "uppercase",
+            boxShadow: "0 8px 20px rgba(27, 11, 140, 0.25)",
+            transition: "transform 0.1s ease",
+          }}
+          onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.98)")}
+          onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+        >
           {t.save}
         </button>
 
-        <div className="settings-card" style={{ marginTop: "15px" }}>
-          <h2 className="settings-card-title">{t.account}</h2>
-          <button
-            className="settings-logout-btn"
-            onClick={() => setShowLogoutModal(true)}
-          >
-            <LogOut size={20} /> {t.logoutAccount}
-          </button>
-
-          <button
-            onClick={() => setShowAboutUs(true)}
+        {/* ACCOUNT CARD */}
+        <div>
+          <h3
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-start",
-              gap: "10px",
-              marginTop: "20px",
+              fontSize: "0.85rem",
+              fontWeight: "800",
               color: "#64748b",
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              width: "100%",
-              fontFamily: "inherit",
-              fontSize: "1rem",
+              textTransform: "uppercase",
+              letterSpacing: "1px",
+              margin: "0 0 10px 10px",
             }}
           >
-            <Info size={20} />
-            <span style={{ fontWeight: "bold" }}>{t.aboutUs}</span>
-          </button>
+            {t.account}
+          </h3>
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: "16px",
+              padding: "20px",
+              boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+              border: "1px solid #f1f5f9",
+              display: "flex",
+              flexDirection: "column",
+              gap: "15px",
+            }}
+          >
+            <button
+              onClick={() => setShowLogoutModal(true)}
+              style={{
+                width: "100%",
+                padding: "14px",
+                borderRadius: "12px",
+                backgroundColor: "#fef2f2",
+                color: "#dc2626",
+                fontWeight: "800",
+                fontSize: "1rem",
+                border: "1px solid #fca5a5",
+                cursor: "pointer",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <LogOut size={20} /> {t.logoutAccount}
+            </button>
+
+            <hr
+              style={{
+                border: "none",
+                borderTop: "1px solid #e2e8f0",
+                margin: "5px 0",
+              }}
+            />
+
+            <button
+              onClick={() => setShowAboutUs(true)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                background: "none",
+                border: "none",
+                padding: "5px 0",
+                cursor: "pointer",
+                width: "100%",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  color: "#475569",
+                }}
+              >
+                <Info size={20} />
+                <span style={{ fontWeight: "700", fontSize: "1rem" }}>
+                  {t.aboutUs}
+                </span>
+              </div>
+              <ChevronLeft
+                size={20}
+                color="#94a3b8"
+                style={{ transform: "rotate(180deg)" }}
+              />
+            </button>
+          </div>
         </div>
       </div>
     </div>

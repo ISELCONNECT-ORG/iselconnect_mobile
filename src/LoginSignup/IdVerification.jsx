@@ -1,11 +1,14 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import Webcam from "react-webcam";
-import { Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle, AlertTriangle, ArrowRight } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { TextRecognition, Script } from "@capacitor-mlkit/text-recognition";
+import {
+  BarcodeScanner,
+  BarcodeFormat,
+} from "@capacitor-mlkit/barcode-scanning";
 import { createWorker } from "tesseract.js";
-import jsQR from "jsqr"; // 🌟 NEW: The lightweight QR scanner
 
 export default function IdVerification({
   step,
@@ -19,7 +22,6 @@ export default function IdVerification({
   const [isSuccess, setIsSuccess] = useState(false);
   const [frozenImage, setFrozenImage] = useState(null);
 
-  // 🌟 NEW: Internal state to handle the 2-step National ID flow
   const [philIdPhase, setPhilIdPhase] = useState("front");
   const [frontImage, setFrontImage] = useState(null);
 
@@ -29,30 +31,7 @@ export default function IdVerification({
   const [focusPoint, setFocusPoint] = useState({ x: 0, y: 0 });
   const [showFocusRing, setShowFocusRing] = useState(false);
 
-  // --- 🌟 1. PHILIPPINE NATIONAL ID QR DECODER ---
-  const processQRImage = async (imageSrc) => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        canvas.width = img.width;
-        canvas.height = img.height;
-        context.drawImage(img, 0, 0, img.width, img.height);
-        const imageData = context.getImageData(
-          0,
-          0,
-          canvas.width,
-          canvas.height,
-        );
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
-        resolve(code ? code.data : null);
-      };
-      img.onerror = () => resolve(null);
-      img.src = imageSrc;
-    });
-  };
-
+  // --- 1. PHILIPPINE NATIONAL ID QR DECODER ---
   const parsePhilSysQR = (qrData) => {
     let payloadStr = qrData;
     if (qrData.split(".").length === 3) {
@@ -93,7 +72,7 @@ export default function IdVerification({
     }
   };
 
-  // --- 🌟 2. DRIVER'S LICENSE / FRONT ID NUMBER OCR ---
+  // --- 2. FRONT ID NUMBER OCR ---
   const parseIDDetails = (text) => {
     const lines = text
       .split("\n")
@@ -139,12 +118,12 @@ export default function IdVerification({
     const isAutoScan = idType === "PhilID" || idType === "DriverLicense";
 
     if (step === "id-scan" && isAutoScan) {
-      // Reset state on initial load
-      if (idType !== "PhilID" || philIdPhase === "front") {
-        setScanFeedback("Scanning automatically...");
-        setIsSuccess(false);
-        setFrozenImage(null);
-      }
+      if (philIdPhase === "transition") return;
+
+      if (philIdPhase === "front")
+        setScanFeedback("Scanning front automatically...");
+      if (philIdPhase === "back")
+        setScanFeedback("Align QR Code in the box...");
 
       isProcessingRef.current = false;
 
@@ -158,30 +137,48 @@ export default function IdVerification({
           return;
         }
 
-        // 🌟 PHASE 2: SCAN BACK OF NATIONAL ID (QR)
+        // 🌟 PHASE 2: SCAN BACK OF NATIONAL ID (USING GOOGLE ML KIT)
         if (idType === "PhilID" && philIdPhase === "back") {
           try {
-            const qrText = await processQRImage(imageSrc);
-            if (qrText) {
-              const parsedData = parsePhilSysQR(qrText);
+            if (Capacitor.isNativePlatform()) {
+              const base64Data = imageSrc.split(",")[1];
+              const fileName = `temp_qr_${Date.now()}.jpeg`;
+              const savedFile = await Filesystem.writeFile({
+                path: fileName,
+                data: base64Data,
+                directory: Directory.Cache,
+              });
 
-              if (parsedData.idNumber) {
-                clearInterval(intervalRef.current);
-                setIsSuccess(true);
-                setFrozenImage(imageSrc); // Freeze on the QR code for effect
-                setScanFeedback("QR Code Verified!");
+              const { barcodes } = await BarcodeScanner.readBarcodesFromImage({
+                path: savedFile.uri,
+                formats: [BarcodeFormat.QrCode],
+              });
 
-                setTimeout(() => {
-                  // Passes the FRONT image to be saved, but the perfect QR data for the form
-                  onIdCaptured(frontImage, parsedData);
-                }, 1500);
-              } else {
-                setScanFeedback("Align QR Code...");
-                isProcessingRef.current = false;
+              await Filesystem.deleteFile({
+                path: fileName,
+                directory: Directory.Cache,
+              });
+
+              if (barcodes.length > 0) {
+                const rawText =
+                  barcodes[0].rawValue || barcodes[0].displayValue;
+                const parsedData = parsePhilSysQR(rawText);
+
+                if (parsedData.idNumber) {
+                  clearInterval(intervalRef.current);
+                  setIsSuccess(true);
+                  setFrozenImage(imageSrc);
+                  setScanFeedback("QR Code Verified Perfectly!");
+
+                  setTimeout(() => {
+                    onIdCaptured(frontImage, parsedData);
+                  }, 1500);
+                  return;
+                }
               }
-            } else {
-              isProcessingRef.current = false;
             }
+            setScanFeedback("Align QR Code...");
+            isProcessingRef.current = false;
           } catch (err) {
             console.error("QR Scan Error:", err);
             isProcessingRef.current = false;
@@ -219,20 +216,18 @@ export default function IdVerification({
           const parsedData = parseIDDetails(text);
 
           if (parsedData.idNumber) {
+            clearInterval(intervalRef.current);
+
             if (idType === "PhilID") {
-              // National ID: Front Captured -> Transition to Back QR Scan
+              setIsSuccess(true);
               setFrontImage(imageSrc);
-              setPhilIdPhase("back");
-              setScanFeedback("Front Captured! Flip to scan QR Code.");
-              // Don't clear interval, it will automatically switch to the QR scanner logic above
-              isProcessingRef.current = false;
+              setFrozenImage(imageSrc);
+              setPhilIdPhase("transition");
+              setScanFeedback(`Front Captured!`);
             } else {
-              // Driver's License: Front Captured -> Finished
-              clearInterval(intervalRef.current);
               setIsSuccess(true);
               setFrozenImage(imageSrc);
               setScanFeedback(`ID Number Found: ${parsedData.idNumber}`);
-
               setTimeout(() => {
                 onIdCaptured(imageSrc, parsedData);
               }, 1500);
@@ -271,22 +266,17 @@ export default function IdVerification({
     const rect = e.currentTarget.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
     setFocusPoint({ x, y });
     setShowFocusRing(true);
-
-    setTimeout(() => {
-      setShowFocusRing(false);
-    }, 1000);
+    setTimeout(() => setShowFocusRing(false), 1000);
 
     const video = webcamRef.current?.video;
     if (video && video.srcObject) {
       const track = video.srcObject.getVideoTracks()[0];
       const capabilities = track.getCapabilities();
-
       if (capabilities.focusMode) {
         try {
           await track.applyConstraints({
@@ -298,7 +288,7 @@ export default function IdVerification({
   };
 
   const isAutoScanMode = idType === "PhilID" || idType === "DriverLicense";
-  const isSquareBox = idType === "PhilID" && philIdPhase === "back"; // Changes targeting box to a square for QR
+  const isSquareBox = idType === "PhilID" && philIdPhase === "back";
 
   if (step === "id-scan") {
     return (
@@ -310,7 +300,8 @@ export default function IdVerification({
           right: 0,
           bottom: 0,
           background: "#000",
-          borderRadius: "0 0 20px 20px",
+          borderRadius:
+            "0px" /* 🌟 FIXED: Removed the curved corners completely */,
           display: "flex",
           flexDirection: "column",
           animation: "contentFade 0.3s ease-out",
@@ -359,16 +350,18 @@ export default function IdVerification({
           {isSuccess && <CheckCircle size={20} />}
           {idType === "PhilID" && philIdPhase === "front"
             ? "Step 1: Align FRONT of National ID"
-            : idType === "PhilID" && philIdPhase === "back"
-              ? "Step 2: Scan QR Code on the BACK"
-              : idType === "DriverLicense" && !isSuccess
-                ? "Step 1: Align FRONT of Driver's License"
-                : !isSuccess
-                  ? "Step 1: Take a clear photo of the FRONT of your ID"
-                  : scanFeedback}
+            : idType === "PhilID" && philIdPhase === "transition"
+              ? "Step 1 Complete!"
+              : idType === "PhilID" && philIdPhase === "back"
+                ? "Step 2: Scan QR Code on the BACK"
+                : idType === "DriverLicense" && !isSuccess
+                  ? "Step 1: Align FRONT of Driver's License"
+                  : !isSuccess
+                    ? "Step 1: Take a clear photo of the FRONT of your ID"
+                    : scanFeedback}
         </div>
 
-        {isAutoScanMode && !isSuccess && (
+        {isAutoScanMode && !isSuccess && philIdPhase !== "transition" && (
           <div
             style={{
               position: "absolute",
@@ -433,7 +426,7 @@ export default function IdVerification({
               top: "45%",
               left: "50%",
               transform: "translate(-50%, -50%)",
-              width: isSquareBox ? "250px" : "85%", // 🌟 Adapts: Rectangle for front, Square for QR
+              width: isSquareBox ? "250px" : "85%",
               height: isSquareBox ? "250px" : "220px",
               border: `3px solid ${isSuccess ? "#4ade80" : "rgba(16, 185, 129, 0.8)"}`,
               borderRadius: "12px",
@@ -443,7 +436,7 @@ export default function IdVerification({
               transition: "all 0.3s ease",
             }}
           >
-            {isAutoScanMode && !isSuccess && (
+            {isAutoScanMode && !isSuccess && philIdPhase !== "transition" && (
               <div
                 style={{
                   position: "absolute",
@@ -457,6 +450,44 @@ export default function IdVerification({
               />
             )}
           </div>
+
+          {philIdPhase === "transition" && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: "40px",
+                left: "0",
+                right: "0",
+                display: "flex",
+                justifyContent: "center",
+                zIndex: 20,
+              }}
+            >
+              <button
+                onClick={() => {
+                  setFrozenImage(null);
+                  setIsSuccess(false);
+                  setPhilIdPhase("back");
+                }}
+                style={{
+                  backgroundColor: "#16a34a",
+                  color: "#ffffff",
+                  padding: "16px 24px",
+                  borderRadius: "30px",
+                  fontWeight: "900",
+                  border: "none",
+                  boxShadow: "0 10px 20px rgba(0,0,0,0.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  fontSize: "1rem",
+                  cursor: "pointer",
+                }}
+              >
+                Proceed to Scan QR (Back) <ArrowRight size={20} />
+              </button>
+            </div>
+          )}
 
           {showFocusRing && !frozenImage && (
             <div
@@ -573,7 +604,7 @@ export default function IdVerification({
           right: 0,
           bottom: 0,
           background: "#000",
-          borderRadius: "0 0 20px 20px",
+          borderRadius: "0px" /* 🌟 FIXED: Removed curved corners */,
           display: "flex",
           flexDirection: "column",
           animation: "contentFade 0.3s ease-out",

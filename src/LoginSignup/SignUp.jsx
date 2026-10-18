@@ -232,7 +232,9 @@ const SearchableDropdown = ({
         }}
         onClick={() => !disabled && setIsOpen(true)}
         disabled={disabled}
-        autoComplete="new-password"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck="false"
       />
 
       <div
@@ -327,8 +329,6 @@ function SignUp({ onBack }) {
   const formRef = useRef(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-
-  const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
   const [municipalities, setMunicipalities] = useState([]);
   const [barangays, setBarangays] = useState([]);
@@ -432,29 +432,21 @@ function SignUp({ onBack }) {
     });
   };
 
-  const handlePrivacyScroll = (e) => {
-    const { scrollHeight, scrollTop, clientHeight } = e.target;
-    if (Math.ceil(scrollTop + clientHeight) >= scrollHeight - 5) {
-      setHasScrolledToBottom(true);
-    }
-  };
-
   const isOtherMunicipality =
     municipalities.find(
       (m) => m.id.toString() === formData.municipality_id.toString(),
     )?.name === "Other / Outside Coverage Area";
 
-  // 🌟 RE-ENABLED NAME AUTO-FILL FOR PERFECT QR DATA
   const handleIdCaptured = (imageSrc, parsedData) => {
-    setCapturedIdImage(imageSrc); // This is the perfectly captured FRONT image
+    setCapturedIdImage(imageSrc);
 
     if (parsedData) {
       setFormData((prev) => ({
         ...prev,
         idNumber: parsedData.idNumber || prev.idNumber,
-        firstName: parsedData.firstName || prev.firstName, // Fills if QR provides it
-        middleName: parsedData.middleName || prev.middleName, // Fills if QR provides it
-        lastName: parsedData.lastName || prev.lastName, // Fills if QR provides it
+        firstName: parsedData.firstName || prev.firstName,
+        middleName: parsedData.middleName || prev.middleName,
+        lastName: parsedData.lastName || prev.lastName,
       }));
     }
 
@@ -685,7 +677,15 @@ function SignUp({ onBack }) {
   const hasSpecial = /[^a-zA-Z0-9]/.test(formData.password);
 
   return (
-    <div className="auth-layout">
+    <div
+      className="auth-layout"
+      style={{
+        height: "100vh",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       {showSuccessModal &&
         createPortal(
           <div
@@ -764,25 +764,68 @@ function SignUp({ onBack }) {
           document.body,
         )}
 
-      <div className="auth-top-section auth-bg-photo">
+      <div
+        className="auth-top-section auth-bg-photo"
+        style={{
+          height: "150px",
+          paddingTop: "20px",
+          flexShrink: 0,
+          zIndex: 1,
+        }}
+      >
         <button
           className="auth-back-btn"
           type="button"
-          style={{ zIndex: 10, animation: "contentFade 0.3s ease-out" }}
+          style={{
+            zIndex: 10,
+            animation: "contentFade 0.3s ease-out",
+            top: "20px",
+            left: "15px",
+            width: "36px",
+            height: "36px",
+          }}
           onClick={handleBackNavigation}
         >
-          <ChevronLeft size={24} strokeWidth={2.5} color="#1e1b4b" />
+          <ChevronLeft size={22} strokeWidth={2.5} color="#1e1b4b" />
         </button>
-        <img src={logo} alt="ISELCONNECT Logo" className="auth-logo-img" />
+        <img
+          src={logo}
+          alt="ISELCONNECT Logo"
+          className="auth-logo-img"
+          style={{ width: "45%", maxWidth: "170px" }}
+        />
       </div>
 
-      <div className="auth-bottom-section">
+      <div
+        className="auth-bottom-section"
+        style={{
+          marginTop: "-30px",
+          paddingTop: "25px",
+          paddingBottom: "25px",
+          flex: 1,
+          overflowY:
+            signupStep === "id-scan" || signupStep === "selfie-scan"
+              ? "hidden"
+              : "auto",
+          display: "flex",
+          flexDirection: "column",
+          position: "relative",
+          zIndex: 2,
+          borderRadius: "0px", // 🌟 INSTANTLY REMOVES THE CURVE
+        }}
+      >
         <div className="auth-title-container">
-          <h2 className="auth-form-title">
+          <h2
+            className="auth-form-title"
+            style={{ fontSize: "1.25rem", margin: "0 0 2px 0" }}
+          >
             <span style={{ color: "#facc15" }}>RESIDENTS</span>{" "}
             <span style={{ color: "#ffffff" }}>SIGN UP</span>
           </h2>
-          <div className="auth-title-underline"></div>
+          <div
+            className="auth-title-underline"
+            style={{ marginBottom: "15px", height: "1px", width: "60%" }}
+          ></div>
         </div>
 
         {errorMsg && <div className="error-alert">{errorMsg}</div>}
@@ -822,10 +865,7 @@ function SignUp({ onBack }) {
               </div>
 
               <div
-                onScroll={handlePrivacyScroll}
                 style={{
-                  maxHeight: "350px",
-                  overflowY: "auto",
                   padding: "15px",
                   backgroundColor: "#f8fafc",
                   border: "1px solid #e2e8f0",
@@ -836,121 +876,55 @@ function SignUp({ onBack }) {
                 }}
               >
                 <p style={{ marginTop: 0 }}>
-                  Welcome to <strong>ISELCONNECT</strong>, the official incident
-                  reporting platform for ISELCO-1. Before you proceed, please
-                  read our Data Privacy guidelines carefully.
+                  Welcome to <strong>ISELCONNECT</strong>. Please read our Data
+                  Privacy guidelines carefully.
                 </p>
 
                 <p
                   style={{
                     color: "#1b0b8c",
                     fontWeight: "bold",
-                    marginBottom: "4px",
+                    margin: "10px 0 4px 0",
                   }}
                 >
                   1. Compliance with the Law
                 </p>
-                <p style={{ marginTop: 0 }}>
-                  In strict compliance with{" "}
-                  <strong>Republic Act No. 10173</strong> (the Data Privacy Act
-                  of 2012), ISELCONNECT is committed to protecting your personal
-                  information. We ensure that your data is processed securely,
-                  fairly, and lawfully.
+                <p style={{ margin: 0 }}>
+                  In compliance with <strong>Republic Act No. 10173</strong>,
+                  your data is processed securely.
                 </p>
 
                 <p
                   style={{
                     color: "#1b0b8c",
                     fontWeight: "bold",
-                    marginBottom: "4px",
+                    margin: "10px 0 4px 0",
                   }}
                 >
                   2. Information We Collect
                 </p>
-                <p style={{ marginTop: 0 }}>
-                  To create a verified resident account, we collect the
-                  following information: your full name, complete residential
-                  address, mobile number, email address, a clear photograph of a
-                  valid Government ID, and a live selfie.
+                <p style={{ margin: 0 }}>
+                  We collect your name, address, mobile, email, ID photo, and
+                  selfie.
                 </p>
 
                 <p
                   style={{
                     color: "#1b0b8c",
                     fontWeight: "bold",
-                    marginBottom: "4px",
+                    margin: "10px 0 4px 0",
                   }}
                 >
                   3. Purpose of Data Collection
                 </p>
-                <p style={{ marginTop: 0 }}>
-                  We collect your data for the following specific purposes:
-                </p>
-                <ul style={{ margin: "5px 0", paddingLeft: "20px" }}>
-                  <li style={{ marginBottom: "6px" }}>
-                    <strong>Identity Verification:</strong> To enforce our "One
-                    Account Per Person" policy and prevent dummy or spam
-                    accounts.
-                  </li>
-                  <li style={{ marginBottom: "6px" }}>
-                    <strong>Accurate Dispatching:</strong> To ensure our linemen
-                    are responding to legitimate reports from actual verified
-                    residents.
-                  </li>
-                  <li>
-                    <strong>Communication:</strong> To send you critical updates
-                    regarding your submitted reports and power advisories.
-                  </li>
-                </ul>
-
-                <p
-                  style={{
-                    color: "#1b0b8c",
-                    fontWeight: "bold",
-                    marginBottom: "4px",
-                    marginTop: "15px",
-                  }}
-                >
-                  4. Data Security & Sharing
-                </p>
-                <p style={{ marginTop: 0 }}>
-                  Your personal data is encrypted and securely stored in our
-                  databases. We will <strong>never</strong> sell, distribute, or
-                  lease your personal information to third parties. Access to
-                  your eKYC (Know Your Customer) documents is strictly
-                  restricted to authorized ISELCO-1 verification officers only.
+                <p style={{ margin: "0 0 20px 0" }}>
+                  Identity verification, accurate dispatching, and critical
+                  communication.
                 </p>
 
-                <p
-                  style={{
-                    color: "#1b0b8c",
-                    fontWeight: "bold",
-                    marginBottom: "4px",
-                  }}
-                >
-                  5. User Rights
-                </p>
-                <p style={{ marginTop: 0 }}>
-                  You have the right to access, update, or request the deletion
-                  of your personal data from our system. By proceeding with the
-                  registration, you explicitly grant ISELCONNECT the consent to
-                  collect, process, and store your data for the operational
-                  purposes stated above.
-                </p>
-
-                <p
-                  style={{
-                    marginBottom: 0,
-                    color: "#1e293b",
-                    fontWeight: "bold",
-                    textAlign: "center",
-                    marginTop: "20px",
-                    paddingTop: "15px",
-                    borderTop: "1px dashed #cbd5e1",
-                  }}
-                >
-                  <em>You have reached the end of the document.</em>
-                </p>
+                <div
+                  style={{ borderTop: "1px dashed #cbd5e1", paddingTop: "5px" }}
+                ></div>
               </div>
             </div>
 
@@ -958,13 +932,11 @@ function SignUp({ onBack }) {
               <button
                 type="button"
                 className="auth-submit-btn"
-                disabled={!hasScrolledToBottom}
                 onClick={() => setSignupStep("id-select")}
                 style={{
                   backgroundColor: "#16a34a",
-                  opacity: hasScrolledToBottom ? 1 : 0.4,
-                  cursor: hasScrolledToBottom ? "pointer" : "not-allowed",
-                  transition: "opacity 0.3s ease",
+                  color: "#ffffff",
+                  cursor: "pointer",
                   textTransform: "uppercase",
                 }}
               >

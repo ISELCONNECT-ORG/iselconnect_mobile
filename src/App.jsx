@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import LoadingScreen from "./components/LoadingScreen";
 import Auth from "./LoginSignup/Auth";
@@ -19,36 +19,35 @@ function App() {
   const [appLoading, setAppLoading] = useState(true);
   const [roleFetching, setRoleFetching] = useState(false);
 
+  // 🌟 FIX: Track which user/role is already loaded so re-fired SIGNED_IN
+  // events (e.g. from verifyOtp in Change Password, or tab refocus)
+  // don't show the LoadingScreen and unmount the whole dashboard.
+  const loadedUserIdRef = useRef(null);
+  const userRoleRef = useRef(null);
+
   // Network Status States
   const [isOnline, setIsOnline] = useState(true);
   const [dismissedOffline, setDismissedOffline] = useState(false);
-  const [isClosingOffline, setIsClosingOffline] = useState(false); // 🌟 NEW: Tracks the exit animation state
+  const [isClosingOffline, setIsClosingOffline] = useState(false);
 
-  // 🌟 --- KEYBOARD OVERLAY EFFECT --- 🌟
+  // --- KEYBOARD OVERLAY EFFECT ---
   useEffect(() => {
-    // Hide the navigation bar when the keyboard pops up
     const hideNav = () => {
       const navBar = document.querySelector(".bottom-nav-wrapper");
       if (navBar) navBar.style.display = "none";
     };
 
-    // Show the navigation bar when the keyboard closes
     const showNav = () => {
-      // Check if the current full-screen overlay wants to force-hide the nav
       const isOverlayActive = document.querySelector(".force-hide-nav");
-
-      // Only restore the navigation bar if there is NO overlay active
       if (!isOverlayActive) {
         const navBar = document.querySelector(".bottom-nav-wrapper");
         if (navBar) navBar.style.display = "";
       }
     };
 
-    // Listen for Capacitor Keyboard events
     Keyboard.addListener("keyboardWillShow", hideNav);
     Keyboard.addListener("keyboardWillHide", showNav);
 
-    // Cleanup listeners when the component unmounts
     return () => {
       Keyboard.removeAllListeners();
     };
@@ -86,7 +85,7 @@ function App() {
       setIsOnline(status.connected);
       if (status.connected) {
         setDismissedOffline(false);
-        setIsClosingOffline(false); // Reset states if connection returns
+        setIsClosingOffline(false);
       }
     };
     checkNetworkStatus();
@@ -99,7 +98,7 @@ function App() {
           setIsOnline(status.connected);
           if (status.connected) {
             setDismissedOffline(false);
-            setIsClosingOffline(false); // Reset states if connection returns
+            setIsClosingOffline(false);
           }
         },
       );
@@ -113,12 +112,11 @@ function App() {
     };
   }, []);
 
-  // 🌟 --- PUSH NOTIFICATIONS EFFECT --- 🌟
+  // --- PUSH NOTIFICATIONS EFFECT ---
   useEffect(() => {
     if (session && session.user) {
       const initializePush = async () => {
         console.log("User is logged in! Registering for Push Notifications...");
-        // Passed session.user.id so pushNotifications.js receives the ID
         await setupPushNotifications();
       };
 
@@ -142,7 +140,7 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
 
       if (isRecovering()) {
@@ -150,9 +148,22 @@ function App() {
       }
 
       if (session) {
-        setRoleFetching(true);
-        fetchUserRole(session.user.id);
+        // 🌟 FIX: If this user's role is already loaded, this is just a
+        // re-fired SIGNED_IN (verifyOtp during Change Password, tab refocus,
+        // etc.). Do NOT show the loading screen or the dashboard unmounts
+        // and the user is thrown back to the Profile tab.
+        const alreadyLoaded =
+          loadedUserIdRef.current === session.user.id && userRoleRef.current;
+        if (alreadyLoaded) return;
+
+        // Only fetch role & trigger Loading Screen on a genuinely fresh login.
+        if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+          setRoleFetching(true);
+          fetchUserRole(session.user.id);
+        }
       } else {
+        loadedUserIdRef.current = null;
+        userRoleRef.current = null;
         setUserRole(null);
         setAppLoading(false);
         setRoleFetching(false);
@@ -177,6 +188,10 @@ function App() {
         if (error) throw error;
 
         if (data) {
+          // 🌟 Remember who is loaded so later SIGNED_IN events are ignored
+          loadedUserIdRef.current = userId;
+          userRoleRef.current = data.role_id;
+
           setUserRole(data.role_id);
           setAppLoading(false);
           setRoleFetching(false);
@@ -199,13 +214,11 @@ function App() {
     setRoleFetching(false);
   };
 
-  // 🌟 NEW: Handles the exit animation sequence
   const handleDismissOffline = () => {
     setIsClosingOffline(true);
-    // Wait for the CSS animation to complete before removing the element from the DOM
     setTimeout(() => {
       setDismissedOffline(true);
-      setIsClosingOffline(false); // Reset for future use
+      setIsClosingOffline(false);
     }, 300);
   };
 
@@ -271,7 +284,6 @@ function App() {
 
   return (
     <>
-      {/* 🌟 Top Notification Banner for No Internet */}
       {!isOnline && !dismissedOffline && (
         <>
           <style>{`
@@ -298,7 +310,6 @@ function App() {
               padding: "15px 20px",
               boxSizing: "border-box",
               boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
-              // Dynamically apply animation based on the closing state
               animation: isClosingOffline
                 ? "slideUpAlert 0.3s ease-in forwards"
                 : "slideDownAlert 0.3s ease-out forwards",

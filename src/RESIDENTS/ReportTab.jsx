@@ -15,13 +15,12 @@ import {
   AlertCircle,
   XOctagon,
   ArrowRight,
-  Globe,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
 import { translations } from "../components/translations";
 
-// Haversine formula to calculate distance (in meters) between two coordinates
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371e3;
   const φ1 = (lat1 * Math.PI) / 180;
@@ -37,7 +36,6 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-// 🌟 ANTI-VPN & SERVICE AREA BOUNDING BOX (Isabela / ISELCO-1 Franchise Area)
 const ISABELA_BOUNDS = {
   minLat: 16.3,
   maxLat: 17.6,
@@ -45,8 +43,9 @@ const ISABELA_BOUNDS = {
   maxLon: 122.5,
 };
 
-// Maximum allowed GPS accuracy radius (in meters) to reject IP/VPN network location fallbacks
 const MAX_ACCEPTABLE_ACCURACY_METERS = 250;
+
+const REPORT_HEADER_BG = "#1b0b8c";
 
 const isWithinServiceArea = (lat, lon) => {
   const numLat = parseFloat(lat);
@@ -60,8 +59,6 @@ const isWithinServiceArea = (lat, lon) => {
   );
 };
 
-// --- INLINE FIELD ERROR ---
-// Pink tab that sits behind the top of the input; the input overlaps its lower edge.
 const FieldError = ({ message, overlap = true }) =>
   message ? (
     <div
@@ -134,13 +131,20 @@ const SearchableDropdown = ({
       <input
         type="text"
         name={name}
-        className="rounded-input"
         style={{
           opacity: disabled ? 0.6 : 1,
           cursor: disabled ? "not-allowed" : "text",
           width: "100%",
+          padding: "16px 20px",
+          borderRadius: "50px",
+          border: hasError ? "2px solid #ef4444" : "1px solid #cbd5e1",
+          backgroundColor: "#ffffff",
+          fontSize: "1rem",
+          fontWeight: "700",
+          color: "#1e293b",
           boxSizing: "border-box",
-          ...(hasError ? { border: "1px solid #ff0000" } : {}),
+          outline: "none",
+          boxShadow: "0 4px 10px rgba(0,0,0,0.03)",
         }}
         placeholder={placeholder}
         value={displayValue}
@@ -162,8 +166,8 @@ const SearchableDropdown = ({
         }}
         style={{
           position: "absolute",
-          right: "15px",
-          top: "25px",
+          right: "20px",
+          top: "50%",
           transform: isOpen
             ? "translateY(-50%) rotate(180deg)"
             : "translateY(-50%) rotate(0deg)",
@@ -175,7 +179,7 @@ const SearchableDropdown = ({
           justifyContent: "center",
         }}
       >
-        <ChevronDown size={20} color="#64748b" />
+        <ChevronDown size={22} color="#64748b" />
       </div>
 
       {isOpen && (
@@ -244,29 +248,59 @@ function ReportTab({ isActive }) {
   const [verificationStatus, setVerificationStatus] = useState("loading");
   const [hasPendingReport, setHasPendingReport] = useState(false);
   const [pendingReportDetails, setPendingReportDetails] = useState(null);
-  const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
 
+  const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(() => {
+    return localStorage.getItem("report_draft_guidelines") === "true";
+  });
+
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [coordinates, setCoordinates] = useState({ lat: "", lon: "" });
+
+  const [imagePreview, setImagePreview] = useState(() => {
+    return localStorage.getItem("report_draft_image") || null;
+  });
+
+  const [coordinates, setCoordinates] = useState(() => {
+    const saved = localStorage.getItem("report_draft_coords");
+    return saved ? JSON.parse(saved) : { lat: "", lon: "" };
+  });
+
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
 
   const [reportTypes, setReportTypes] = useState([]);
   const [municipalities, setMunicipalities] = useState([]);
   const [barangays, setBarangays] = useState([]);
 
-  const [formData, setFormData] = useState({
-    report_type_id: "",
-    municipality_id: "",
-    barangay_id: "",
-    purok_sitio: "",
-    landmark: "",
-    description: "",
+  const [formData, setFormData] = useState(() => {
+    const saved = localStorage.getItem("report_draft_form");
+    return saved
+      ? JSON.parse(saved)
+      : {
+          report_type_id: "",
+          municipality_id: "",
+          barangay_id: "",
+          purok_sitio: "",
+          landmark: "",
+          description: "",
+        };
   });
+
+  useEffect(() => {
+    localStorage.setItem("report_draft_guidelines", hasAcceptedGuidelines);
+    if (imagePreview) {
+      try {
+        localStorage.setItem("report_draft_image", imagePreview);
+      } catch (e) {}
+    } else {
+      localStorage.removeItem("report_draft_image");
+    }
+    localStorage.setItem("report_draft_coords", JSON.stringify(coordinates));
+    localStorage.setItem("report_draft_form", JSON.stringify(formData));
+  }, [hasAcceptedGuidelines, imagePreview, coordinates, formData]);
 
   const webcamRef = useRef(null);
   const formContainerRef = useRef(null);
@@ -278,11 +312,25 @@ function ReportTab({ isActive }) {
     selectedReportTypeObj?.name?.toLowerCase().includes("other") ||
     selectedReportTypeObj?.name?.toLowerCase().includes("not specified");
 
-  useEffect(() => {
-    if (!isActive) {
-      setHasAcceptedGuidelines(false);
-    }
-  }, [isActive]);
+  const handleClearForm = () => {
+    setImagePreview(null);
+    setCoordinates({ lat: "", lon: "" });
+    setFormData({
+      report_type_id: "",
+      municipality_id: "",
+      barangay_id: "",
+      purok_sitio: "",
+      landmark: "",
+      description: "",
+    });
+    setFieldErrors({});
+    setError("");
+
+    localStorage.removeItem("report_draft_image");
+    localStorage.removeItem("report_draft_coords");
+    localStorage.removeItem("report_draft_form");
+    setShowClearConfirmModal(false);
+  };
 
   useEffect(() => {
     const checkUserStatus = async () => {
@@ -351,7 +399,7 @@ function ReportTab({ isActive }) {
   }, [isActive]);
 
   useEffect(() => {
-    if (showSuccessModal) {
+    if (showSuccessModal || showClearConfirmModal) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
@@ -359,7 +407,7 @@ function ReportTab({ isActive }) {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [showSuccessModal]);
+  }, [showSuccessModal, showClearConfirmModal]);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -412,7 +460,6 @@ function ReportTab({ isActive }) {
         const data = await res.json();
 
         if (data && data.address) {
-          // 🌟 Secondary VPN Check: Verify LocationIQ resolved inside the Philippines
           if (
             data.address.country_code &&
             data.address.country_code.toLowerCase() !== "ph"
@@ -490,7 +537,6 @@ function ReportTab({ isActive }) {
     autoFillAddress();
   }, [coordinates.lat, coordinates.lon, municipalities]);
 
-  // Auto-fill (GPS -> address) updates formData directly, so clear matching errors here
   useEffect(() => {
     setFieldErrors((prev) => {
       if (!prev.municipality_id && !prev.barangay_id) return prev;
@@ -560,7 +606,6 @@ function ReportTab({ isActive }) {
 
       const { latitude, longitude, accuracy } = position.coords;
 
-      // 🌟 1. Block VPN / Foreign / Out-of-Province Coordinates
       if (!isWithinServiceArea(latitude, longitude)) {
         setImagePreview(null);
         setCoordinates({ lat: "", lon: "" });
@@ -574,7 +619,6 @@ function ReportTab({ isActive }) {
         return;
       }
 
-      // 🌟 2. Block Coarse IP/Network Fallback Coordinates (VPNs & Approximate Location)
       if (accuracy && accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
         setImagePreview(null);
         setCoordinates({ lat: "", lon: "" });
@@ -627,7 +671,6 @@ function ReportTab({ isActive }) {
     ) {
       errors.coordinates = "Please wait for location coordinates to load.";
     } else if (!isWithinServiceArea(coordinates.lat, coordinates.lon)) {
-      // 🌟 Final submission safety check against VPN coordinates
       errors.coordinates = "Location must be within Isabela.";
       setError(
         "Invalid location coordinates detected outside the ISELCO-1 service area. Please turn off your VPN and retake the photo.",
@@ -647,7 +690,6 @@ function ReportTab({ isActive }) {
     setFieldErrors(errors);
     const firstInvalid = Object.keys(errors)[0];
     if (firstInvalid) {
-      // Do not clear overall error if it's the custom VPN error
       if (firstInvalid !== "coordinates" || !error.includes("VPN")) {
         setError("");
       }
@@ -663,7 +705,6 @@ function ReportTab({ isActive }) {
       return;
     }
 
-    // 🌟 THE SUPERVISOR'S RULE: Check distance and report type!
     if (
       hasPendingReport &&
       pendingReportDetails?.latitude &&
@@ -676,9 +717,7 @@ function ReportTab({ isActive }) {
         parseFloat(pendingReportDetails.longitude),
       );
 
-      // Distance Threshold set to 50 meters (Standard pole spacing)
       if (dist <= 50) {
-        // Condition: Same Account + Near + Same Report Type -> BLOCK
         if (
           parseInt(formData.report_type_id) ===
           parseInt(pendingReportDetails.report_type_id)
@@ -687,7 +726,6 @@ function ReportTab({ isActive }) {
             `You already have a pending report for this exact issue nearby (${Math.round(dist)}m away). Our dispatch team will inspect and resolve all adjacent infrastructure damage in this immediate area.`,
           );
         }
-        // If it's a DIFFERENT report type, we bypass this block and let them submit!
       }
     }
 
@@ -747,7 +785,7 @@ function ReportTab({ isActive }) {
           barangay_id: parseInt(formData.barangay_id),
           purok_sitio: formData.purok_sitio.trim() || null,
           branch_id: automaticBranchId,
-          status_id: 1, // Pending Status
+          status_id: 1,
           photo_url: publicUrlData.publicUrl,
         },
       ]);
@@ -789,15 +827,15 @@ function ReportTab({ isActive }) {
   if (verificationStatus === "loading") {
     return (
       <div
-        className="bg-navy-tab"
+        className="page-transition"
         style={{
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
           minHeight: "100vh",
-          color: "#ffffff",
+          backgroundColor: "#f8fafc",
+          color: "#1b0b8c",
           fontWeight: "bold",
-          overscrollBehavior: "none",
         }}
       >
         Checking account status...
@@ -805,17 +843,17 @@ function ReportTab({ isActive }) {
     );
   }
 
-  // BANNED UI
   if (isBanned) {
     return (
       <div
-        className="bg-navy-tab"
+        className="page-transition"
         style={{
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
           padding: "20px 16px 110px 16px",
           boxSizing: "border-box",
+          backgroundColor: "#f8fafc",
         }}
       >
         <div
@@ -828,8 +866,7 @@ function ReportTab({ isActive }) {
             maxWidth: "400px",
             boxSizing: "border-box",
             textAlign: "center",
-            boxShadow: "0 15px 30px rgba(0,0,0,0.2)",
-            animation: "contentFade 0.3s ease-out",
+            boxShadow: "0 15px 30px rgba(0,0,0,0.05)",
           }}
         >
           <div
@@ -842,7 +879,7 @@ function ReportTab({ isActive }) {
               alignItems: "center",
               justifyContent: "center",
               margin: "0 auto 20px auto",
-              boxShadow: "0 0 20px rgba(239, 68, 68, 0.4)",
+              boxShadow: "0 0 20px rgba(239, 68, 68, 0.2)",
             }}
           >
             <XOctagon size={44} color="#dc2626" />
@@ -903,19 +940,19 @@ function ReportTab({ isActive }) {
     );
   }
 
-  // UNVERIFIED UI
   if (verificationStatus !== "approved") {
     const isRejected = verificationStatus === "rejected";
 
     return (
       <div
-        className="bg-navy-tab"
+        className="page-transition"
         style={{
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
           padding: "20px 16px 110px 16px",
           boxSizing: "border-box",
+          backgroundColor: "#f8fafc",
         }}
       >
         <div
@@ -928,8 +965,7 @@ function ReportTab({ isActive }) {
             maxWidth: "400px",
             boxSizing: "border-box",
             textAlign: "center",
-            boxShadow: "0 15px 30px rgba(0,0,0,0.2)",
-            animation: "contentFade 0.3s ease-out",
+            boxShadow: "0 15px 30px rgba(0,0,0,0.05)",
           }}
         >
           <div
@@ -1012,7 +1048,118 @@ function ReportTab({ isActive }) {
   }
 
   return (
-    <div className="bg-navy-tab" style={{ overscrollBehavior: "none" }}>
+    <div
+      className="page-transition"
+      style={{
+        overscrollBehavior: "none",
+        backgroundColor: "#f8fafc",
+        ...(hasAcceptedGuidelines && !isCameraOpen
+          ? { padding: 0, margin: 0, minHeight: "100vh" }
+          : {}),
+        height: !hasAcceptedGuidelines && !isCameraOpen ? "100vh" : "auto",
+        overflow:
+          !hasAcceptedGuidelines && !isCameraOpen ? "hidden" : "visible",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {showClearConfirmModal &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100vw",
+              height: "100vh",
+              backgroundColor: "rgba(0, 0, 0, 0.65)",
+              zIndex: 999999,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <div
+              className="modal-box"
+              style={{
+                margin: "0 20px",
+                textAlign: "center",
+                padding: "25px 20px",
+              }}
+            >
+              <div
+                style={{
+                  backgroundColor: "#fee2e2",
+                  width: "60px",
+                  height: "60px",
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 15px auto",
+                }}
+              >
+                <XOctagon size={32} color="#dc2626" />
+              </div>
+              <h3
+                className="modal-title"
+                style={{
+                  fontSize: "1.4rem",
+                  color: "#1e293b",
+                  marginBottom: "10px",
+                  marginTop: "10px",
+                }}
+              >
+                Clear Draft?
+              </h3>
+              <p
+                className="modal-text"
+                style={{
+                  fontSize: "0.95rem",
+                  color: "#475569",
+                  marginBottom: "25px",
+                }}
+              >
+                Are you sure you want to clear your current report progress?
+                This action cannot be undone.
+              </p>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  style={{
+                    flex: 1,
+                    padding: "14px",
+                    borderRadius: "50px",
+                    backgroundColor: "#f1f5f9",
+                    color: "#475569",
+                    fontWeight: "bold",
+                    border: "1px solid #cbd5e1",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setShowClearConfirmModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  style={{
+                    flex: 1,
+                    padding: "14px",
+                    borderRadius: "50px",
+                    backgroundColor: "#ef4444",
+                    color: "#ffffff",
+                    fontWeight: "bold",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                  onClick={handleClearForm}
+                >
+                  Yes, Clear
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
       {showSuccessModal &&
         createPortal(
           <div
@@ -1060,8 +1207,12 @@ function ReportTab({ isActive }) {
                     description: "",
                   });
 
+                  localStorage.removeItem("report_draft_guidelines");
+                  localStorage.removeItem("report_draft_image");
+                  localStorage.removeItem("report_draft_coords");
+                  localStorage.removeItem("report_draft_form");
+
                   setHasPendingReport(true);
-                  // Ensure we store ALL data for distance & type checking of future reports!
                   setPendingReportDetails({
                     landmark: formData.landmark.trim(),
                     latitude: coordinates.lat,
@@ -1082,14 +1233,16 @@ function ReportTab({ isActive }) {
           style={{
             display: "flex",
             flexDirection: "column",
-            minHeight: "100vh",
-            padding: "20px 16px 110px 16px",
+            flex: 1,
+            justifyContent: "center",
+            padding: "0 16px 100px 16px",
             boxSizing: "border-box",
+            overflow: "hidden",
           }}
         >
           <div
             style={{
-              margin: "auto",
+              margin: "0 auto",
               width: "100%",
               display: "flex",
               flexDirection: "column",
@@ -1097,18 +1250,19 @@ function ReportTab({ isActive }) {
             }}
           >
             <h1
-              className="report-title text-yellow"
+              className="report-title"
               style={{
                 textAlign: "center",
                 marginBottom: "0",
                 fontSize: "1.5rem",
+                color: "#1b0b8c",
               }}
             >
               REPORT GUIDELINES
             </h1>
             <p
               style={{
-                color: "#cbd5e1",
+                color: "#475569",
                 textAlign: "center",
                 fontSize: "0.85rem",
                 marginTop: "-4px",
@@ -1123,7 +1277,8 @@ function ReportTab({ isActive }) {
                 backgroundColor: "#ffffff",
                 borderRadius: "20px",
                 padding: "18px 16px",
-                boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+                boxShadow: "0 10px 25px rgba(0,0,0,0.05)",
+                border: "1px solid #e2e8f0",
                 display: "flex",
                 flexDirection: "column",
                 gap: "16px",
@@ -1167,50 +1322,6 @@ function ReportTab({ isActive }) {
                     Ensure your device GPS is turned on and VPNs are disabled
                     before capturing a photo so linemen can locate the issue
                     precisely.
-                  </p>
-                </div>
-              </div>
-
-              {/* 🌟 NEW: Disable VPNs Guideline */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: "12px",
-                  alignItems: "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    backgroundColor: "#fce7f3",
-                    padding: "8px",
-                    borderRadius: "50%",
-                  }}
-                >
-                  <Globe size={20} color="#db2777" />
-                </div>
-                <div>
-                  <h3
-                    style={{
-                      margin: "0 0 4px 0",
-                      color: "#1e293b",
-                      fontSize: "0.9rem",
-                      fontWeight: "900",
-                    }}
-                  >
-                    Disable VPNs
-                  </h3>
-                  <p
-                    style={{
-                      margin: 0,
-                      color: "#475569",
-                      fontSize: "0.75rem",
-                      lineHeight: "1.4",
-                    }}
-                  >
-                    Please turn off any active VPN on your device before
-                    reporting. VPNs will alter your coordinates, resulting in an
-                    inaccurate report location that will be automatically
-                    blocked by the system.
                   </p>
                 </div>
               </div>
@@ -1403,212 +1514,414 @@ function ReportTab({ isActive }) {
           </div>
         </div>
       ) : !isCameraOpen ? (
-        <div className="report-form-container" ref={formContainerRef}>
-          <h1 className="report-title text-yellow">{t.reportTitle}</h1>
-
-          <div>
-            <FieldError message={fieldErrors.photo} overlap={false} />
-            <div
-              className="photo-capture-box"
-              data-field="photo"
-              onClick={() => setIsCameraOpen(true)}
+        <div
+          className="report-form-container"
+          ref={formContainerRef}
+          style={{
+            padding: 0,
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+          }}
+        >
+          <div
+            style={{
+              position: "sticky",
+              top: "-1px",
+              zIndex: 100,
+              backgroundColor: "rgba(27, 11, 140, 0.95)", // Navy blue with blur
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              padding:
+                "calc(env(safe-area-inset-top, 0px) + 16px) 16px 10px 16px", // 🌟 Reduced bottom padding for a tighter fit
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderBottom: "1px solid rgba(255,255,255,0.1)",
+            }}
+          >
+            <h1
+              className="report-title"
+              style={{
+                margin: 0,
+                textAlign: "center",
+                fontSize: "2.1rem", // 🌟 EVEN BIGGER FONT
+                letterSpacing: "1px",
+                color: "#fde047", // Yellow text
+                fontWeight: "900",
+                textTransform: "uppercase",
+              }}
             >
-              {imagePreview ? (
-                <img
-                  src={imagePreview}
-                  alt="Captured report"
-                  className="captured-image-preview"
-                />
-              ) : (
-                <div className="placeholder-content">
-                  <CameraIcon size={48} strokeWidth={1.5} color="#1b0b8c" />
-                  <h2>{t.capturePhoto}</h2>
-                </div>
+              {t.reportTitle || "Report"}
+            </h1>
+          </div>
+
+          <div
+            style={{
+              flex: 1,
+              backgroundColor: "#f8fafc",
+              padding: "8px 16px 120px 16px", // 🌟 Reduced top padding so the camera box is closer to the header
+              boxSizing: "border-box",
+            }}
+          >
+            <div>
+              <FieldError message={fieldErrors.photo} overlap={false} />
+
+              <div
+                data-field="photo"
+                onClick={() => setIsCameraOpen(true)}
+                style={{
+                  width: "100%",
+                  height: "240px",
+                  borderRadius: "24px",
+                  border: fieldErrors.photo
+                    ? "2px dashed #ef4444"
+                    : "2px dashed #cbd5e1",
+                  backgroundColor: "#ffffff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 10px rgba(0,0,0,0.03)",
+                }}
+              >
+                {imagePreview ? (
+                  <img
+                    src={imagePreview}
+                    alt="Captured report"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  <div style={{ textAlign: "center" }}>
+                    <CameraIcon
+                      size={48}
+                      color="#1b0b8c"
+                      style={{ margin: "0 auto 10px auto" }}
+                    />
+                    <h2
+                      style={{
+                        fontSize: "1.1rem",
+                        margin: 0,
+                        fontWeight: "800",
+                        color: "#1e293b",
+                      }}
+                    >
+                      {t.capturePhoto}
+                    </h2>
+                  </div>
+                )}
+              </div>
+
+              {imagePreview && (
+                <>
+                  <FieldError
+                    message={fieldErrors.coordinates}
+                    overlap={false}
+                  />
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      backgroundColor: "#ffffff",
+                      border: fieldErrors.coordinates
+                        ? "2px solid #ff0000"
+                        : "1px solid #cbd5e1",
+                      borderRadius: "50px",
+                      padding: "14px 20px",
+                      marginTop: "15px",
+                      boxShadow: "0 4px 10px rgba(0,0,0,0.03)",
+                      width: "100%",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <div
+                      style={{
+                        marginRight: "15px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <MapPin size={26} color="#1b0b8c" strokeWidth={2.5} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <span
+                        style={{
+                          fontSize: "0.85rem",
+                          fontWeight: "900",
+                          color: "#1e293b",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Incident Geo-Tag
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "0.85rem",
+                          fontWeight: "700",
+                          marginTop: "2px",
+                          color:
+                            coordinates.lat && coordinates.lat !== "Fetching..."
+                              ? "#16a34a"
+                              : "#94a3b8",
+                        }}
+                      >
+                        {coordinates.lat === "Fetching..."
+                          ? "Acquiring GPS signal..."
+                          : coordinates.lat
+                            ? `LAT: ${coordinates.lat}, LON: ${coordinates.lon}`
+                            : "No coordinates captured"}
+                      </span>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
 
-            {/* 🌟 INCIDENT GEO-TAG DISPLAY - ONLY VISIBLE AFTER PHOTO CAPTURE */}
-            {imagePreview && (
-              <>
-                <FieldError message={fieldErrors.coordinates} overlap={false} />
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    backgroundColor: "#ffffff",
-                    border: fieldErrors.coordinates
-                      ? "2px solid #ff0000"
-                      : "1px solid #e2e8f0",
-                    borderRadius: "15px",
-                    padding: "12px 16px",
-                    marginTop: "10px",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-                    width: "100%",
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <div
-                    style={{
-                      marginRight: "15px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <MapPin size={28} color="#1b0b8c" strokeWidth={2} />
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column" }}>
-                    <span
-                      style={{
-                        fontSize: "0.85rem",
-                        fontWeight: "900",
-                        color: "#1e293b",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.5px",
-                      }}
-                    >
-                      Incident Geo-Tag
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "0.9rem",
-                        fontWeight: "700",
-                        marginTop: "2px",
-                        color:
-                          coordinates.lat && coordinates.lat !== "Fetching..."
-                            ? "#16a34a"
-                            : "#94a3b8",
-                      }}
-                    >
-                      {coordinates.lat === "Fetching..."
-                        ? "Acquiring GPS signal..."
-                        : coordinates.lat
-                          ? `LAT: ${coordinates.lat}, LON: ${coordinates.lon}`
-                          : "No coordinates captured"}
-                    </span>
-                  </div>
-                </div>
-              </>
+            {error && (
+              <div
+                style={{
+                  backgroundColor: "#fee2e2",
+                  color: "#ef4444",
+                  padding: "12px",
+                  borderRadius: "15px",
+                  textAlign: "center",
+                  fontWeight: "bold",
+                  fontSize: "0.85rem",
+                  marginTop: "15px",
+                  border: "1px solid #fca5a5",
+                }}
+              >
+                {error}
+              </div>
             )}
-          </div>
 
-          {error && (
             <div
+              className="report-inputs"
               style={{
-                backgroundColor: "#fee2e2",
-                color: "#ef4444",
-                padding: "12px",
-                borderRadius: "15px",
-                textAlign: "center",
-                fontWeight: "bold",
-                fontSize: "0.85rem",
-                marginBottom: "15px",
-                border: "1px solid #fca5a5",
+                marginTop: "15px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
               }}
             >
-              {error}
+              <div>
+                <FieldError
+                  message={fieldErrors.municipality_id}
+                  overlap={false}
+                />
+                <SearchableDropdown
+                  name="municipality_id"
+                  options={municipalities}
+                  value={formData.municipality_id}
+                  onChange={handleInputChange}
+                  placeholder={t.incidentMun}
+                  hasError={!!fieldErrors.municipality_id}
+                />
+              </div>
+
+              <div>
+                <FieldError message={fieldErrors.barangay_id} overlap={false} />
+                <SearchableDropdown
+                  name="barangay_id"
+                  options={barangays}
+                  value={formData.barangay_id}
+                  onChange={handleInputChange}
+                  placeholder={
+                    !formData.municipality_id
+                      ? "Select Municipality first"
+                      : t.incidentBrgy
+                  }
+                  disabled={!formData.municipality_id}
+                  hasError={!!fieldErrors.barangay_id}
+                />
+              </div>
+
+              <div>
+                <FieldError message={fieldErrors.purok_sitio} overlap={false} />
+                <input
+                  type="text"
+                  name="purok_sitio"
+                  placeholder={t.purokSitio}
+                  value={formData.purok_sitio}
+                  onChange={handleInputChange}
+                  style={{
+                    width: "100%",
+                    padding: "16px 20px",
+                    borderRadius: "50px",
+                    border: "1px solid #cbd5e1",
+                    backgroundColor: "#ffffff",
+                    fontSize: "1rem",
+                    fontWeight: "700",
+                    color: "#1e293b",
+                    boxSizing: "border-box",
+                    outline: "none",
+                    boxShadow: "0 4px 10px rgba(0,0,0,0.03)",
+                  }}
+                />
+              </div>
+
+              <div>
+                <FieldError
+                  message={fieldErrors.report_type_id}
+                  overlap={false}
+                />
+                <SearchableDropdown
+                  name="report_type_id"
+                  options={reportTypes}
+                  value={formData.report_type_id}
+                  onChange={handleInputChange}
+                  placeholder={t.reportType}
+                  hasError={!!fieldErrors.report_type_id}
+                />
+              </div>
+
+              <div>
+                <FieldError message={fieldErrors.landmark} overlap={false} />
+                <input
+                  type="text"
+                  name="landmark"
+                  placeholder={t.landmarkPlaceholder || "Landmark"}
+                  value={formData.landmark}
+                  onChange={handleInputChange}
+                  style={{
+                    width: "100%",
+                    padding: "16px 20px",
+                    borderRadius: "50px",
+                    border: fieldErrors.landmark
+                      ? "2px solid #ef4444"
+                      : "1px solid #cbd5e1",
+                    backgroundColor: "#ffffff",
+                    fontSize: "1rem",
+                    fontWeight: "700",
+                    color: "#1e293b",
+                    boxSizing: "border-box",
+                    outline: "none",
+                    boxShadow: "0 4px 10px rgba(0,0,0,0.03)",
+                  }}
+                />
+              </div>
+
+              <div>
+                <FieldError message={fieldErrors.description} overlap={false} />
+                <input
+                  type="text"
+                  name="description"
+                  placeholder={
+                    isOtherSelected
+                      ? "Describe the issue/damage (Required) *"
+                      : t.descOptional
+                  }
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  style={{
+                    width: "100%",
+                    padding: "16px 20px",
+                    borderRadius: "50px",
+                    border: fieldErrors.description
+                      ? "2px solid #ef4444"
+                      : isOtherSelected && !formData.description.trim()
+                        ? "2px solid #f59e0b"
+                        : "1px solid #cbd5e1",
+                    backgroundColor: "#ffffff",
+                    fontSize: "1rem",
+                    fontWeight: "700",
+                    color: "#1e293b",
+                    boxSizing: "border-box",
+                    outline: "none",
+                    boxShadow: "0 4px 10px rgba(0,0,0,0.03)",
+                  }}
+                />
+              </div>
             </div>
-          )}
 
-          <div className="report-inputs">
-            <div>
-              <FieldError message={fieldErrors.municipality_id} />
-              <SearchableDropdown
-                name="municipality_id"
-                options={municipalities}
-                value={formData.municipality_id}
-                onChange={handleInputChange}
-                placeholder={t.incidentMun}
-                hasError={!!fieldErrors.municipality_id}
-              />
-            </div>
+            <div
+              style={{
+                marginTop: "25px",
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+              }}
+            >
+              {(imagePreview ||
+                formData.municipality_id ||
+                formData.report_type_id ||
+                formData.landmark ||
+                formData.description ||
+                formData.purok_sitio) && (
+                <button
+                  onClick={() => setShowClearConfirmModal(true)}
+                  disabled={isSubmitting}
+                  style={{
+                    flexShrink: 0,
+                    width: "56px",
+                    height: "56px",
+                    borderRadius: "50%",
+                    backgroundColor: "transparent",
+                    border: "2px solid #cbd5e1",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    opacity: isSubmitting ? 0.5 : 1,
+                  }}
+                  onMouseDown={(e) => {
+                    e.currentTarget.style.transform = "scale(0.95)";
+                    e.currentTarget.style.backgroundColor = "#fee2e2";
+                    e.currentTarget.style.borderColor = "#fca5a5";
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.transform = "scale(1)";
+                    e.currentTarget.style.backgroundColor = "transparent";
+                    e.currentTarget.style.borderColor = "#cbd5e1";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "scale(1)";
+                    e.currentTarget.style.backgroundColor = "transparent";
+                    e.currentTarget.style.borderColor = "#cbd5e1";
+                  }}
+                >
+                  <Trash2 size={24} color="#475569" />
+                </button>
+              )}
 
-            <div>
-              <FieldError message={fieldErrors.barangay_id} />
-              <SearchableDropdown
-                name="barangay_id"
-                options={barangays}
-                value={formData.barangay_id}
-                onChange={handleInputChange}
-                placeholder={
-                  !formData.municipality_id
-                    ? "Select Municipality first"
-                    : t.incidentBrgy
-                }
-                disabled={!formData.municipality_id}
-                hasError={!!fieldErrors.barangay_id}
-              />
-            </div>
-
-            <input
-              type="text"
-              name="purok_sitio"
-              className="rounded-input"
-              placeholder={t.purokSitio}
-              value={formData.purok_sitio}
-              onChange={handleInputChange}
-            />
-
-            <div>
-              <FieldError message={fieldErrors.report_type_id} />
-              <SearchableDropdown
-                name="report_type_id"
-                options={reportTypes}
-                value={formData.report_type_id}
-                onChange={handleInputChange}
-                placeholder={t.reportType}
-                hasError={!!fieldErrors.report_type_id}
-              />
-            </div>
-
-            <div>
-              <FieldError message={fieldErrors.landmark} />
-              <input
-                type="text"
-                name="landmark"
-                className="rounded-input"
-                placeholder={t.landmarkPlaceholder || "Landmark"}
-                value={formData.landmark}
-                onChange={handleInputChange}
-                style={
-                  fieldErrors.landmark
-                    ? { border: "1px solid #ff0000" }
-                    : undefined
-                }
-              />
-            </div>
-
-            <div>
-              <FieldError message={fieldErrors.description} />
-              <input
-                type="text"
-                name="description"
-                className="rounded-input"
-                placeholder={
-                  isOtherSelected
-                    ? "Describe the issue/damage (Required) *"
-                    : t.descOptional
-                }
-                value={formData.description}
-                onChange={handleInputChange}
+              <button
+                onClick={handleSubmitReport}
+                disabled={isSubmitting || coordinates.lat === "Fetching..."}
                 style={{
-                  border: fieldErrors.description
-                    ? "1px solid #ff0000"
-                    : isOtherSelected && !formData.description.trim()
-                      ? "2px solid #f59e0b"
-                      : "none",
+                  flex: 1,
+                  padding: "18px",
+                  borderRadius: "50px",
+                  backgroundColor: "#1b0b8c",
+                  color: "#ffffff",
+                  fontWeight: "900",
+                  fontSize: "1.1rem",
+                  border: "none",
+                  cursor: "pointer",
+                  textTransform: "uppercase",
+                  boxShadow: "0 8px 20px rgba(27, 11, 140, 0.25)",
+                  transition: "transform 0.1s ease",
+                  opacity:
+                    isSubmitting || coordinates.lat === "Fetching..." ? 0.7 : 1,
                 }}
-              />
+                onMouseDown={(e) =>
+                  (e.currentTarget.style.transform = "scale(0.98)")
+                }
+                onMouseUp={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
+              >
+                {isSubmitting ? t.submitting : t.submit}
+              </button>
             </div>
           </div>
-
-          <button
-            className="submit-report-btn"
-            onClick={handleSubmitReport}
-            disabled={isSubmitting || coordinates.lat === "Fetching..."}
-          >
-            {isSubmitting ? t.submitting : t.submit}
-          </button>
         </div>
       ) : (
         <div

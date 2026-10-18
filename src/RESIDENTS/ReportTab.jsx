@@ -1249,13 +1249,16 @@ function ReportTab({ isActive }) {
               gap: "10px",
             }}
           >
+            {/* 🌟 ENHANCED GUIDELINES TITLE */}
             <h1
               className="report-title"
               style={{
                 textAlign: "center",
                 marginBottom: "0",
-                fontSize: "1.5rem",
+                fontSize: "1.8rem",
                 color: "#1b0b8c",
+                fontWeight: "bold",
+                WebkitTextStroke: "1px #1b0b8c",
               }}
             >
               REPORT GUIDELINES
@@ -1529,27 +1532,29 @@ function ReportTab({ isActive }) {
               position: "sticky",
               top: "-1px",
               zIndex: 100,
-              backgroundColor: "rgba(27, 11, 140, 0.95)", // Navy blue with blur
+              backgroundColor: "rgba(27, 11, 140, 0.95)",
               backdropFilter: "blur(16px)",
               WebkitBackdropFilter: "blur(16px)",
               padding:
-                "calc(env(safe-area-inset-top, 0px) + 16px) 16px 10px 16px", // 🌟 Reduced bottom padding for a tighter fit
+                "calc(env(safe-area-inset-top, 0px) + 16px) 16px 10px 16px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               borderBottom: "1px solid rgba(255,255,255,0.1)",
             }}
           >
+            {/* 🌟 ENHANCED REPORT TITLE */}
             <h1
               className="report-title"
               style={{
                 margin: 0,
                 textAlign: "center",
-                fontSize: "2.1rem", // 🌟 EVEN BIGGER FONT
+                fontSize: "2.1rem",
                 letterSpacing: "1px",
-                color: "#fde047", // Yellow text
-                fontWeight: "900",
+                color: "#fde047",
+                fontWeight: "bold",
                 textTransform: "uppercase",
+                WebkitTextStroke: "1px #fde047",
               }}
             >
               {t.reportTitle || "Report"}
@@ -1560,7 +1565,7 @@ function ReportTab({ isActive }) {
             style={{
               flex: 1,
               backgroundColor: "#f8fafc",
-              padding: "8px 16px 120px 16px", // 🌟 Reduced top padding so the camera box is closer to the header
+              padding: "8px 16px 120px 16px",
               boxSizing: "border-box",
             }}
           >

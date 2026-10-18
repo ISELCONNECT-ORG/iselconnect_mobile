@@ -19,8 +19,10 @@ function App() {
   const [appLoading, setAppLoading] = useState(true);
   const [roleFetching, setRoleFetching] = useState(false);
 
-  // Network Status State
+  // Network Status States
   const [isOnline, setIsOnline] = useState(true);
+  const [dismissedOffline, setDismissedOffline] = useState(false);
+  const [isClosingOffline, setIsClosingOffline] = useState(false); // 🌟 NEW: Tracks the exit animation state
 
   // 🌟 --- KEYBOARD OVERLAY EFFECT --- 🌟
   useEffect(() => {
@@ -32,7 +34,7 @@ function App() {
 
     // Show the navigation bar when the keyboard closes
     const showNav = () => {
-      // 🌟 NEW: Check if the current full-screen overlay wants to force-hide the nav
+      // Check if the current full-screen overlay wants to force-hide the nav
       const isOverlayActive = document.querySelector(".force-hide-nav");
 
       // Only restore the navigation bar if there is NO overlay active
@@ -82,6 +84,10 @@ function App() {
     const checkNetworkStatus = async () => {
       const status = await Network.getStatus();
       setIsOnline(status.connected);
+      if (status.connected) {
+        setDismissedOffline(false);
+        setIsClosingOffline(false); // Reset states if connection returns
+      }
     };
     checkNetworkStatus();
 
@@ -91,6 +97,10 @@ function App() {
         "networkStatusChange",
         (status) => {
           setIsOnline(status.connected);
+          if (status.connected) {
+            setDismissedOffline(false);
+            setIsClosingOffline(false); // Reset states if connection returns
+          }
         },
       );
     };
@@ -189,6 +199,16 @@ function App() {
     setRoleFetching(false);
   };
 
+  // 🌟 NEW: Handles the exit animation sequence
+  const handleDismissOffline = () => {
+    setIsClosingOffline(true);
+    // Wait for the CSS animation to complete before removing the element from the DOM
+    setTimeout(() => {
+      setDismissedOffline(true);
+      setIsClosingOffline(false); // Reset for future use
+    }, 300);
+  };
+
   // --- ROUTING LOGIC ---
   const renderContent = () => {
     if (appLoading || roleFetching) {
@@ -251,43 +271,107 @@ function App() {
 
   return (
     <>
-      {!isOnline && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100vw",
-            height: "100vh",
-            backgroundColor: "rgba(255, 255, 255, 0.95)",
-            backdropFilter: "blur(5px)",
-            WebkitBackdropFilter: "blur(5px)",
-            zIndex: 999999,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: "20px",
-            textAlign: "center",
-            animation: "contentFade 0.3s ease-out",
-          }}
-        >
-          <WifiOff size={80} color="#ef4444" style={{ marginBottom: "20px" }} />
-          <h2
+      {/* 🌟 Top Notification Banner for No Internet */}
+      {!isOnline && !dismissedOffline && (
+        <>
+          <style>{`
+            @keyframes slideDownAlert {
+              from { transform: translateY(-100%); opacity: 0; }
+              to { transform: translateY(0); opacity: 1; }
+            }
+            @keyframes slideUpAlert {
+              from { transform: translateY(0); opacity: 1; }
+              to { transform: translateY(-100%); opacity: 0; }
+            }
+          `}</style>
+          <div
             style={{
-              color: "#1e293b",
-              fontWeight: "900",
-              marginBottom: "10px",
-              fontSize: "1.8rem",
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100vw",
+              backgroundColor: "#fef2f2",
+              borderBottom: "3px solid #ef4444",
+              zIndex: 999999,
+              display: "flex",
+              flexDirection: "column",
+              padding: "15px 20px",
+              boxSizing: "border-box",
+              boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+              // Dynamically apply animation based on the closing state
+              animation: isClosingOffline
+                ? "slideUpAlert 0.3s ease-in forwards"
+                : "slideDownAlert 0.3s ease-out forwards",
             }}
           >
-            No Internet Connection
-          </h2>
-          <p style={{ color: "#64748b", lineHeight: "1.6", maxWidth: "300px" }}>
-            ISELCONNECT requires an active internet connection to synchronize
-            reports. Please check your Wi-Fi or mobile data.
-          </p>
-        </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "12px",
+                marginBottom: "12px",
+              }}
+            >
+              <div
+                style={{
+                  backgroundColor: "#fee2e2",
+                  padding: "8px",
+                  borderRadius: "50%",
+                }}
+              >
+                <WifiOff size={24} color="#dc2626" />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  marginTop: "2px",
+                }}
+              >
+                <h3
+                  style={{
+                    margin: "0 0 2px 0",
+                    color: "#991b1b",
+                    fontSize: "1rem",
+                    fontWeight: "900",
+                  }}
+                >
+                  No Internet Connection
+                </h3>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#7f1d1d",
+                    fontSize: "0.8rem",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  ISELCONNECT requires an active internet connection to
+                  synchronize reports. Please check your Wi-Fi or mobile data.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleDismissOffline}
+              style={{
+                backgroundColor: "#ef4444",
+                color: "#ffffff",
+                border: "none",
+                padding: "10px",
+                borderRadius: "25px",
+                fontWeight: "900",
+                fontSize: "0.85rem",
+                cursor: "pointer",
+                textTransform: "uppercase",
+                width: "100%",
+                boxShadow: "0 4px 10px rgba(239, 68, 68, 0.3)",
+                transition: "background-color 0.2s",
+              }}
+            >
+              Understood
+            </button>
+          </div>
+        </>
       )}
 
       {renderContent()}

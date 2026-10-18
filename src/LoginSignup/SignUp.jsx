@@ -39,7 +39,6 @@ const validatePassword = (password) => {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// --- INLINE FIELD ERROR ---
 const FieldError = ({ message }) =>
   message ? (
     <div
@@ -60,8 +59,6 @@ const FieldError = ({ message }) =>
     </div>
   ) : null;
 
-// --- 🌟 NEW: SIMPLE DROPDOWN COMPONENT (For ID Selection) ---
-// Replaces the native <select> tag to allow for smooth animations
 const SimpleDropdown = ({ options, value, onChange, name }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -94,10 +91,10 @@ const SimpleDropdown = ({ options, value, onChange, name }) => {
           cursor: "pointer",
           width: "100%",
           boxSizing: "border-box",
-          padding: "16px 40px 16px 20px", // Extra right padding for the chevron
+          padding: "16px 40px 16px 20px",
           display: "flex",
           alignItems: "center",
-          justifyContent: "center", // Keeps the ID name centered like your screenshot
+          justifyContent: "center",
           backgroundColor: "#ffffff",
           fontWeight: "bold",
           color: "#1b0b8c",
@@ -107,7 +104,6 @@ const SimpleDropdown = ({ options, value, onChange, name }) => {
       >
         {selectedOption ? selectedOption.label : "Select Valid ID"}
 
-        {/* Spinning Chevron */}
         <div
           style={{
             position: "absolute",
@@ -126,7 +122,6 @@ const SimpleDropdown = ({ options, value, onChange, name }) => {
         </div>
       </div>
 
-      {/* Sliding Menu */}
       {isOpen && (
         <div
           style={{
@@ -177,7 +172,6 @@ const SimpleDropdown = ({ options, value, onChange, name }) => {
   );
 };
 
-// --- SEARCHABLE DROPDOWN COMPONENT (For Municipalities/Barangays) ---
 const SearchableDropdown = ({
   options,
   value,
@@ -218,13 +212,6 @@ const SearchableDropdown = ({
 
   return (
     <div ref={dropdownRef} style={{ position: "relative", width: "100%" }}>
-      <style>{`
-        @keyframes dropdownSlide {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-
       <input
         type="text"
         name={name}
@@ -341,7 +328,6 @@ function SignUp({ onBack }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Tracking scroll for Privacy Act
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
 
   const [municipalities, setMunicipalities] = useState([]);
@@ -365,7 +351,6 @@ function SignUp({ onBack }) {
   const [capturedIdImage, setCapturedIdImage] = useState(null);
   const [capturedSelfieImage, setCapturedSelfieImage] = useState(null);
 
-  // ID Types for the SimpleDropdown
   const idOptions = [
     { value: "PhilID", label: "National ID (PhilSys)" },
     { value: "DriverLicense", label: "Driver's License" },
@@ -459,8 +444,20 @@ function SignUp({ onBack }) {
       (m) => m.id.toString() === formData.municipality_id.toString(),
     )?.name === "Other / Outside Coverage Area";
 
+  // 🌟 RE-ENABLED NAME AUTO-FILL FOR PERFECT QR DATA
   const handleIdCaptured = (imageSrc, parsedData) => {
-    setCapturedIdImage(imageSrc);
+    setCapturedIdImage(imageSrc); // This is the perfectly captured FRONT image
+
+    if (parsedData) {
+      setFormData((prev) => ({
+        ...prev,
+        idNumber: parsedData.idNumber || prev.idNumber,
+        firstName: parsedData.firstName || prev.firstName, // Fills if QR provides it
+        middleName: parsedData.middleName || prev.middleName, // Fills if QR provides it
+        lastName: parsedData.lastName || prev.lastName, // Fills if QR provides it
+      }));
+    }
+
     setSignupStep("selfie-scan");
   };
 
@@ -771,10 +768,7 @@ function SignUp({ onBack }) {
         <button
           className="auth-back-btn"
           type="button"
-          style={{
-            zIndex: 10,
-            animation: "contentFade 0.3s ease-out",
-          }}
+          style={{ zIndex: 10, animation: "contentFade 0.3s ease-out" }}
           onClick={handleBackNavigation}
         >
           <ChevronLeft size={24} strokeWidth={2.5} color="#1e1b4b" />
@@ -793,7 +787,7 @@ function SignUp({ onBack }) {
 
         {errorMsg && <div className="error-alert">{errorMsg}</div>}
 
-        {/* STEP 1: PRIVACY ACT WITH EXPANDED SCROLL-TO-ACCEPT */}
+        {/* STEP 1: PRIVACY ACT */}
         {signupStep === "privacy" && (
           <div
             style={{
@@ -827,7 +821,6 @@ function SignUp({ onBack }) {
                 </h3>
               </div>
 
-              {/* SCROLLABLE TEXT BOX */}
               <div
                 onScroll={handlePrivacyScroll}
                 style={{
@@ -981,7 +974,7 @@ function SignUp({ onBack }) {
           </div>
         )}
 
-        {/* 🌟 UPDATED STEP 2: SELECT ID TYPE USING NEW SimpleDropdown */}
+        {/* STEP 2: SELECT ID TYPE */}
         {signupStep === "id-select" && (
           <div
             style={{
@@ -1025,7 +1018,6 @@ function SignUp({ onBack }) {
               >
                 Choose the ID you will scan for verification.
               </p>
-
               <div className="auth-input-group" style={{ width: "100%" }}>
                 <SimpleDropdown
                   name="idType"
@@ -1047,10 +1039,11 @@ function SignUp({ onBack }) {
           </div>
         )}
 
-        {/* STEPS 3 & 4: IMPORTED CAMERA COMPONENT */}
+        {/* STEPS 3 & 4: CAMERA COMPONENT */}
         {(signupStep === "id-scan" || signupStep === "selfie-scan") && (
           <IdVerification
             step={signupStep}
+            idType={formData.idType}
             onIdCaptured={handleIdCaptured}
             onSelfieCaptured={handleSelfieCaptured}
           />
@@ -1088,7 +1081,6 @@ function SignUp({ onBack }) {
                   style={inputStyle("idNumber")}
                 />
               </div>
-
               <div className="auth-input-group">
                 <FieldError message={fieldErrors.firstName} />
                 <input
@@ -1101,7 +1093,6 @@ function SignUp({ onBack }) {
                   style={inputStyle("firstName")}
                 />
               </div>
-
               <div className="auth-input-group">
                 <input
                   type="text"
@@ -1113,7 +1104,6 @@ function SignUp({ onBack }) {
                   style={{ padding: "14px 20px" }}
                 />
               </div>
-
               <div className="auth-input-group">
                 <FieldError message={fieldErrors.lastName} />
                 <input
@@ -1126,7 +1116,6 @@ function SignUp({ onBack }) {
                   style={inputStyle("lastName")}
                 />
               </div>
-
               <div className="auth-input-group">
                 <FieldError message={fieldErrors.municipality_id} />
                 <SearchableDropdown
@@ -1138,7 +1127,6 @@ function SignUp({ onBack }) {
                   hasError={!!fieldErrors.municipality_id}
                 />
               </div>
-
               {isOtherMunicipality && (
                 <div className="auth-input-group">
                   <FieldError message={fieldErrors.otherLocation} />
@@ -1153,7 +1141,6 @@ function SignUp({ onBack }) {
                   />
                 </div>
               )}
-
               <div className="auth-input-group">
                 <FieldError message={fieldErrors.barangay_id} />
                 <SearchableDropdown
@@ -1170,7 +1157,6 @@ function SignUp({ onBack }) {
                   hasError={!!fieldErrors.barangay_id}
                 />
               </div>
-
               <div className="auth-input-group">
                 <input
                   type="text"
@@ -1182,7 +1168,6 @@ function SignUp({ onBack }) {
                   style={{ padding: "14px 20px" }}
                 />
               </div>
-
               <div className="auth-input-group">
                 <FieldError message={fieldErrors.mobileNumber} />
                 <input
@@ -1195,7 +1180,6 @@ function SignUp({ onBack }) {
                   style={inputStyle("mobileNumber")}
                 />
               </div>
-
               <div className="auth-input-group">
                 <FieldError message={fieldErrors.email} />
                 <input
@@ -1208,7 +1192,6 @@ function SignUp({ onBack }) {
                   style={inputStyle("email")}
                 />
               </div>
-
               <div className="auth-input-group">
                 <FieldError message={fieldErrors.password} />
                 <div className="password-input-wrapper">
@@ -1332,7 +1315,7 @@ function SignUp({ onBack }) {
           </form>
         )}
 
-        {/* STEP 6: IMPORTED EMAIL OTP COMPONENT */}
+        {/* STEP 6: EMAIL OTP COMPONENT */}
         {signupStep === "otp" && (
           <EmailOtpVerification
             email={formData.email}

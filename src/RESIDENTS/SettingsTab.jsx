@@ -9,7 +9,7 @@ import "../Resident.css";
 
 function SettingsTab({ onBack, onLogout }) {
   const savedLanguage = localStorage.getItem("appLanguage") || "English";
-  const t = translations[savedLanguage];
+  const t = translations[savedLanguage] || translations["English"];
 
   const [language, setLanguage] = useState(savedLanguage);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -17,15 +17,12 @@ function SettingsTab({ onBack, onLogout }) {
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
   const [isClosing, setIsClosing] = useState(false);
-
-  // 🌟 NEW: Track if we are returning from a sub-menu to block the entry animation
   const [isReturning, setIsReturning] = useState(false);
 
   const [showChangePassword, setShowChangePassword] = useState(() => {
     return !!localStorage.getItem("settings_cp_stage");
   });
 
-  // HIDE BOTTOM NAV BAR WHEN SETTINGS IS OPEN
   useEffect(() => {
     const navBar = document.querySelector(".bottom-nav-wrapper");
     if (navBar) {
@@ -73,7 +70,7 @@ function SettingsTab({ onBack, onLogout }) {
       <AboutUs
         onBack={() => {
           setShowAboutUs(false);
-          setIsReturning(true); // 🌟 Prevents the animation from replaying
+          setIsReturning(true);
         }}
       />
     );
@@ -84,7 +81,7 @@ function SettingsTab({ onBack, onLogout }) {
       <ChangePassword
         onBack={() => {
           setShowChangePassword(false);
-          setIsReturning(true); // 🌟 Prevents the animation from replaying
+          setIsReturning(true);
         }}
         onSuccess={() => {
           setShowChangePassword(false);
@@ -121,7 +118,6 @@ function SettingsTab({ onBack, onLogout }) {
           backgroundColor: "#f8fafc",
           padding: "0px 16px 40px 16px",
           boxSizing: "border-box",
-          // 🌟 If closing, slide out. If returning, do nothing. Otherwise, slide in.
           animation: isClosing
             ? "slideOutRight 0.25s ease forwards"
             : isReturning
@@ -129,7 +125,6 @@ function SettingsTab({ onBack, onLogout }) {
               : "slideInRight 0.3s ease-out forwards",
         }}
       >
-        {/* SUCCESS MODAL */}
         {showSaveSuccess && (
           <div className="modal-overlay" style={{ zIndex: 999999 }}>
             <div className="modal-box">
@@ -156,28 +151,30 @@ function SettingsTab({ onBack, onLogout }) {
           </div>
         )}
 
-        {/* LOGOUT MODAL */}
         {showLogoutModal && (
           <div className="custom-alert-overlay" style={{ zIndex: 999999 }}>
             <div className="custom-alert-box">
               <div className="custom-alert-header alert-header-danger">
-                <h2>{t.signOutTitle}</h2>
+                <h2>{t.signOutTitle || "SIGN OUT"}</h2>
               </div>
               <div className="custom-alert-body">
-                <p>{t.signOutText}</p>
+                <p>
+                  {t.signOutText ||
+                    "Are you sure you want to log out of your account?"}
+                </p>
                 <div className="custom-alert-buttons">
                   <button
                     className="alert-btn no-btn"
                     onClick={() => setShowLogoutModal(false)}
                   >
-                    {t.cancelBtn}
+                    {t.cancelBtn || "CANCEL"}
                   </button>
                   <button
                     className="alert-btn yes-btn"
                     style={{ backgroundColor: "#ef4444" }}
                     onClick={handleSignOut}
                   >
-                    {t.confirmSignOutBtn}
+                    {t.confirmSignOutBtn || "LOG OUT"}
                   </button>
                 </div>
               </div>
@@ -185,7 +182,6 @@ function SettingsTab({ onBack, onLogout }) {
           </div>
         )}
 
-        {/* STICKY HEADER */}
         <div
           style={{
             position: "sticky",
@@ -226,12 +222,11 @@ function SettingsTab({ onBack, onLogout }) {
               color: "#1b0b8c",
             }}
           >
-            {t.settingsTitle}
+            {t.settingsTitle || "SETTINGS"}
           </h2>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          {/* LANGUAGES CARD */}
           <div>
             <h3
               style={{
@@ -243,7 +238,7 @@ function SettingsTab({ onBack, onLogout }) {
                 margin: "0 0 10px 10px",
               }}
             >
-              {t.languages}
+              {t.languages || "Languages"}
             </h3>
             <div
               style={{
@@ -270,7 +265,7 @@ function SettingsTab({ onBack, onLogout }) {
                     color: "#1e293b",
                   }}
                 >
-                  {t.chooseLanguage}
+                  {t.chooseLanguage || "Choose Language"}
                 </span>
               </div>
               <select
@@ -294,7 +289,6 @@ function SettingsTab({ onBack, onLogout }) {
             </div>
           </div>
 
-          {/* SAVE BUTTON */}
           <button
             onClick={handleSaveSettings}
             style={{
@@ -316,10 +310,9 @@ function SettingsTab({ onBack, onLogout }) {
             }
             onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
           >
-            {t.save}
+            {t.save || "SAVE CHANGES"}
           </button>
 
-          {/* ACCOUNT CARD */}
           <div>
             <h3
               style={{
@@ -331,7 +324,7 @@ function SettingsTab({ onBack, onLogout }) {
                 margin: "0 0 10px 10px",
               }}
             >
-              {t.account}
+              {t.account || "Account"}
             </h3>
             <div
               style={{
@@ -368,7 +361,7 @@ function SettingsTab({ onBack, onLogout }) {
                 >
                   <KeyRound size={20} />
                   <span style={{ fontWeight: "700", fontSize: "1rem" }}>
-                    Change Password
+                    {t.changePassword || "Change Password"}
                   </span>
                 </div>
                 <ChevronLeft
@@ -409,7 +402,7 @@ function SettingsTab({ onBack, onLogout }) {
                 >
                   <Info size={20} />
                   <span style={{ fontWeight: "700", fontSize: "1rem" }}>
-                    {t.aboutUs}
+                    {t.aboutUs || "About Us"}
                   </span>
                 </div>
                 <ChevronLeft
@@ -445,7 +438,11 @@ function SettingsTab({ onBack, onLogout }) {
                   gap: "8px",
                 }}
               >
-                <LogOut size={20} /> {t.logoutAccount}
+                {/* 🌟 BULLETPROOF FALLBACK */}
+                <LogOut size={20} />{" "}
+                {t.logoutAccount ||
+                  t.confirmSignOutBtn ||
+                  (savedLanguage === "Tagalog" ? "Mag-log Out" : "Log Out")}
               </button>
             </div>
           </div>

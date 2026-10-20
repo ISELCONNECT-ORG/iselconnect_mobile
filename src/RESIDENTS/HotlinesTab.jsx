@@ -14,7 +14,6 @@ function HotlinesTab({ onBack }) {
 
   const [isClosing, setIsClosing] = useState(false);
 
-  // 🌟 HIDE BOTTOM NAV BAR WHEN HOTLINES IS OPEN
   useEffect(() => {
     const navBar = document.querySelector(".bottom-nav-wrapper");
     if (navBar) {
@@ -98,7 +97,7 @@ function HotlinesTab({ onBack }) {
           width: "100vw",
           height: "100vh",
           zIndex: 99999,
-          backgroundColor: "#f8fafc", // 🌟 LIGHT THEME BACKGROUND
+          backgroundColor: "#f8fafc",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -107,7 +106,6 @@ function HotlinesTab({ onBack }) {
             : "slideInRight 0.3s ease-out forwards",
         }}
       >
-        {/* 🌟 FROSTED GLASS STICKY HEADER */}
         <div
           style={{
             padding:
@@ -146,7 +144,7 @@ function HotlinesTab({ onBack }) {
                   fontWeight: "900",
                   fontSize: "1.3rem",
                   letterSpacing: "1px",
-                  color: "#1b0b8c", // 🌟 NAVY BLUE TEXT
+                  color: "#1b0b8c",
                   textTransform: "uppercase",
                 }}
               >
@@ -166,7 +164,7 @@ function HotlinesTab({ onBack }) {
                 width: "100%",
                 boxSizing: "border-box",
                 margin: 0,
-                borderRadius: "50px", // 🌟 PILL SHAPED
+                borderRadius: "50px",
                 border: "1px solid #cbd5e1",
                 outline: "none",
                 fontSize: "1rem",
@@ -210,7 +208,6 @@ function HotlinesTab({ onBack }) {
             </div>
           )}
 
-          {/* 🌟 LIGHT THEME ALERT BOX */}
           <div
             style={{
               display: "flex",
@@ -237,8 +234,7 @@ function HotlinesTab({ onBack }) {
                 lineHeight: "1.4",
               }}
             >
-              Tap on any branch hotline card below to directly call the office
-              for immediate assistance.
+              {t.hotlineInstructions}
             </p>
           </div>
 
@@ -270,7 +266,6 @@ function HotlinesTab({ onBack }) {
                   href={`tel:${formatPhoneNumber(branch.branch_hotline)}`}
                   style={{ textDecoration: "none", display: "block" }}
                 >
-                  {/* 🌟 UPDATED MODERN CARDS */}
                   <div
                     style={{
                       display: "flex",

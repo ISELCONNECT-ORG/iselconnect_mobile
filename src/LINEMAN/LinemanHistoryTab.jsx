@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import LinemanReportDetail from "./LinemanReportDetail";
-import { translations } from "../components/translations";
+import { translations, translateReportType } from "../components/translations";
 
 const getPriorityColor = (level) => {
   switch (level?.toUpperCase()) {
@@ -20,7 +20,7 @@ const getPriorityColor = (level) => {
 
 function LinemanHistoryTab() {
   const currentLang = localStorage.getItem("appLanguage") || "English";
-  const t = translations[currentLang];
+  const t = translations[currentLang] || translations["English"];
 
   const [activeView, setActiveView] = useState("RESOLVED");
 
@@ -146,7 +146,7 @@ function LinemanHistoryTab() {
             textTransform: "uppercase",
           }}
         >
-          Report Logs
+          {t.reportLogs || "Report Logs"}
         </h2>
 
         <div
@@ -177,7 +177,7 @@ function LinemanHistoryTab() {
               transition: "all 0.3s ease",
             }}
           >
-            Resolved ({resolvedReports.length})
+            {t.resolved || "Resolved"} ({resolvedReports.length})
           </button>
           <button
             onClick={() => setActiveView("GENERAL")}
@@ -198,7 +198,7 @@ function LinemanHistoryTab() {
               transition: "all 0.3s ease",
             }}
           >
-            General System
+            {t.generalSystem || "General System"}
           </button>
         </div>
       </div>
@@ -212,7 +212,9 @@ function LinemanHistoryTab() {
         }}
       >
         {loading ? (
-          <p className="l-rt-loading">Loading records...</p>
+          <p className="l-rt-loading">
+            {t.loadingRecords || "Loading records..."}
+          </p>
         ) : activeView === "RESOLVED" ? (
           resolvedReports.length === 0 ? (
             <p className="l-rt-loading" style={{ color: "#64748b" }}>
@@ -272,7 +274,10 @@ function LinemanHistoryTab() {
                       lineHeight: "1.2",
                     }}
                   >
-                    {report.report_types?.name || "UNKNOWN ISSUE"}
+                    {translateReportType(
+                      report.report_types?.name,
+                      currentLang,
+                    ) || "UNKNOWN ISSUE"}
                   </h3>
                   <p
                     style={{
@@ -304,7 +309,7 @@ function LinemanHistoryTab() {
                     flexShrink: 0,
                   }}
                 >
-                  RESOLVED
+                  {t.resolved || "RESOLVED"}
                 </div>
               </div>
             ))
@@ -358,7 +363,10 @@ function LinemanHistoryTab() {
                     lineHeight: "1.2",
                   }}
                 >
-                  {report.report_types?.name || "UNKNOWN ISSUE"}
+                  {translateReportType(
+                    report.report_types?.name,
+                    currentLang,
+                  ) || "UNKNOWN ISSUE"}
                 </h3>
                 <p
                   style={{

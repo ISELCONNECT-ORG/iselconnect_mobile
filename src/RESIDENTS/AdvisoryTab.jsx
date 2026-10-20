@@ -16,7 +16,7 @@ function AdvisoryTab() {
   const [expandedGroups, setExpandedGroups] = useState({});
 
   const currentLang = localStorage.getItem("appLanguage") || "English";
-  const t = translations[currentLang];
+  const t = translations[currentLang] || translations["English"];
 
   useEffect(() => {
     const fetchUserLocation = async () => {
@@ -123,14 +123,12 @@ function AdvisoryTab() {
           : [];
         const myBrgyLower = userLoc.barangay.toLowerCase();
 
-        // Check if user's barangay is explicitly listed, or if "All Barangays" is stated
         const isAll = affectedArr.some(
           (b) => b.includes("all") || b.includes("whole"),
         );
         const exactMatch = affectedArr.find((b) => b === myBrgyLower);
 
         if (isAll || exactMatch) {
-          // Force the affected areas to strictly only show the user's specific barangay
           acc.push({
             ...current,
             affected_areas: userLoc.barangay,
@@ -230,7 +228,7 @@ function AdvisoryTab() {
             }}
           >
             <MapPin size={18} />
-            My Area
+            {t.myArea || "My Area"}
           </button>
           <button
             onClick={() => setFilterMode("all")}
@@ -252,7 +250,7 @@ function AdvisoryTab() {
             }}
           >
             <Globe size={18} />
-            All Areas
+            {t.allAreas || "All Areas"}
           </button>
         </div>
       </div>
@@ -263,8 +261,9 @@ function AdvisoryTab() {
         <div style={{ textAlign: "center", padding: "40px 20px" }}>
           <p style={{ color: "#64748b", fontSize: "1rem", fontWeight: "600" }}>
             {filterMode === "my_location"
-              ? "No power interruptions scheduled for your specific area."
-              : t.noAdvisories}
+              ? t.noAdvisoriesMyArea ||
+                "No power interruptions scheduled for your specific area."
+              : t.noAdvisories || "No power advisories at the moment."}
           </p>
         </div>
       ) : (
@@ -310,7 +309,7 @@ function AdvisoryTab() {
                     zIndex: 10,
                   }}
                 >
-                  CANCELLED
+                  {t.cancelled || "CANCELLED"}
                 </div>
               )}
 

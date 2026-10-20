@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "../supabaseClient";
 import LinemanReportDetail from "./LinemanReportDetail";
-import { translations } from "../components/translations";
+import { translations, translateReportType } from "../components/translations";
 import { Power, ClipboardList } from "lucide-react";
 import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
@@ -37,7 +37,7 @@ function LinemanReportTab({
   dutyEndTime,
 }) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
-  const t = translations[currentLang];
+  const t = translations[currentLang] || translations["English"];
 
   const [linemanName, setLinemanName] = useState("");
   const [assignedReports, setAssignedReports] = useState([]);
@@ -45,8 +45,6 @@ function LinemanReportTab({
   const [selectedReport, setSelectedReport] = useState(null);
 
   const [filterStatus, setFilterStatus] = useState("ALL");
-
-  // 🌟 NEW: Track closing state to synchronize the multi-layer animations
   const [closingReport, setClosingReport] = useState(false);
 
   useEffect(() => {
@@ -100,7 +98,6 @@ function LinemanReportTab({
         "appStateChange",
         ({ isActive }) => {
           if (isActive) {
-            console.log("App resumed from background! Refreshing queue...");
             fetchDashboardData(true);
           }
         },
@@ -218,7 +215,6 @@ function LinemanReportTab({
     }
   };
 
-  // 🌟 NEW: Master handler for sliding out the detail screen while the list fades back up
   const handleCloseReport = (shouldRefresh = false) => {
     setClosingReport(true);
     setTimeout(() => {
@@ -251,7 +247,6 @@ function LinemanReportTab({
         }
       `}</style>
 
-      {/* 🌟 RENDER DETAIL VIEW AS A PORTAL SO IT DOESN'T DESTROY THE LIST BELOW */}
       {(selectedReport || closingReport) &&
         createPortal(
           <div
@@ -281,7 +276,6 @@ function LinemanReportTab({
           document.body,
         )}
 
-      {/* 🌟 THE MAIN LIST VIEW NOW STAYS MOUNTED AND FADES UP/DOWN DYNAMICALLY */}
       <div
         className="page-transition"
         style={{
@@ -383,12 +377,12 @@ function LinemanReportTab({
             >
               <Power size={14} strokeWidth={3} />
               {!hasEmployeeRow
-                ? "NO PROFILE"
+                ? t.noProfile || "NO PROFILE"
                 : dutyStatus === "On Duty"
-                  ? "ON DUTY"
+                  ? t.onDuty || "ON DUTY"
                   : dutyStatus === "Loading..."
-                    ? "LOADING"
-                    : "OFF DUTY"}
+                    ? t.loading || "LOADING"
+                    : t.offDuty || "OFF DUTY"}
             </button>
           )}
         </div>
@@ -565,7 +559,7 @@ function LinemanReportTab({
                 padding: 0,
               }}
             >
-              View All
+              {t.viewAll || "View All"}
             </button>
           )}
         </div>
@@ -624,11 +618,20 @@ function LinemanReportTab({
                 badgeBg = "#fffbeb";
                 badgeColor = "#ca8a04";
                 badgeBorder = "#fef08a";
+                displayStatusName = t.onQueue || "ON QUEUE";
               } else if (statusName === "IN PROGRESS") {
                 displayStatusName = t.inProgress || "IN PROGRESS";
                 badgeBg = "#f0f9ff";
                 badgeColor = "#0284c7";
                 badgeBorder = "#bae6fd";
+              } else if (statusName === "PENDING VERIFICATION") {
+                displayStatusName =
+                  t.pendingVerification || "PENDING VERIFICATION";
+                badgeBg = "#ffedd5";
+                badgeColor = "#c2410c";
+                badgeBorder = "#fed7aa";
+              } else if (statusName === "PENDING") {
+                displayStatusName = t.pending || "PENDING";
               }
 
               return (
@@ -693,7 +696,10 @@ function LinemanReportTab({
                       }}
                     >
                       {report.id}.{" "}
-                      {report.report_types?.name || "UNKNOWN ISSUE"}
+                      {translateReportType(
+                        report.report_types?.name,
+                        currentLang,
+                      ) || "UNKNOWN ISSUE"}
                     </h3>
 
                     <p

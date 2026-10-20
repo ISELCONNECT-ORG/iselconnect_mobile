@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { translations } from "../components/translations";
+import { translations, translateReportType } from "../components/translations";
 import { Geolocation } from "@capacitor/geolocation";
 import { createPortal } from "react-dom";
 import {
@@ -21,23 +21,21 @@ import LinemanMapOverlay from "./LinemanMapOverlay";
 import LinemanResolutionFlow from "./LinemanResolutionFlow";
 
 function LinemanReportDetail({ report, onBack, onReportUpdated }) {
-  const t = translations[localStorage.getItem("appLanguage") || "English"];
+  const currentLang = localStorage.getItem("appLanguage") || "English";
+  const t = translations[currentLang] || translations["English"];
   const watchIdRef = useRef(null);
 
   const [activeStatus, setActiveStatus] = useState(
     report.report_statuses?.name?.toUpperCase() || "PENDING",
   );
 
-  // Modals & Flows
   const [successModal, setSuccessModal] = useState(null);
   const [showDelayModal, setShowDelayModal] = useState(false);
   const [showResolutionFlow, setShowResolutionFlow] = useState(false);
 
-  // Track Map state and animation
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [mapExitState, setMapExitState] = useState(null);
 
-  // Data & State
   const [delayReason, setDelayReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmittingDelay, setIsSubmittingDelay] = useState(false);
@@ -53,7 +51,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     activeStatus === "RESOLVED" || activeStatus === "ADMIN VERIFIED";
   const isLocked = isResolved || activeStatus === "PENDING VERIFICATION";
 
-  // Hide the global navigation bar and lock background scroll
   useEffect(() => {
     const navBar = document.querySelector(".bottom-nav-wrapper");
     if (navBar) navBar.style.display = "none";
@@ -91,7 +88,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     };
   }, []);
 
-  // Real-time Status Sync
   useEffect(() => {
     const channel = supabase
       .channel(`public:lineman_report_${report.id}`)
@@ -119,7 +115,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     return () => supabase.removeChannel(channel);
   }, [report.id]);
 
-  // Initial Data Fetch
   useEffect(() => {
     let isMounted = true;
     const fetchInitData = async () => {
@@ -205,7 +200,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     };
   }, [report.id, activeStatus]);
 
-  // Live Tracking Sync
   useEffect(() => {
     if (activeStatus !== "IN PROGRESS" || !currentUserId) return;
     const track = async () => {
@@ -378,7 +372,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     }, 250);
   };
 
-  // Extract Resolution Flow
   if (showResolutionFlow) {
     return (
       <LinemanResolutionFlow
@@ -398,7 +391,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     );
   }
 
-  // Main UI
   return (
     <div
       className="detail-layout page-transition"
@@ -417,7 +409,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         animation: "containerTransformExp 0.4s forwards",
       }}
     >
-      {/* 🌟 HORIZONTAL SLIDE KEYFRAMES FOR THE MAP */}
       <style>{`
         @keyframes slideInRightMap {
           from { transform: translateX(100vw); }
@@ -429,7 +420,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         }
       `}</style>
 
-      {/* Reusable Modals */}
       {successModal && (
         <div
           className="success-modal-overlay"
@@ -516,12 +506,6 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                   boxShadow: "0 4px 15px rgba(16, 185, 129, 0.3)",
                   transition: "transform 0.1s",
                 }}
-                onMouseDown={(e) =>
-                  (e.currentTarget.style.transform = "scale(0.97)")
-                }
-                onMouseUp={(e) =>
-                  (e.currentTarget.style.transform = "scale(1)")
-                }
               >
                 OK!
               </button>
@@ -593,7 +577,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                     color: "#475569",
                   }}
                 >
-                  Cancel
+                  {t.cancelBtn || "Cancel"}
                 </button>
                 <button
                   onClick={handleDelaySubmit}
@@ -646,7 +630,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               textTransform: "uppercase",
             }}
           >
-            {report.report_types?.name}
+            {translateReportType(report.report_types?.name, currentLang)}
           </h2>
         </div>
         {activeStatus === "IN PROGRESS" && (
@@ -693,7 +677,10 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           >
             {isResolved ? <CheckCircle size={22} /> : <AlertCircle size={22} />}
             <span style={{ fontWeight: "900", textTransform: "uppercase" }}>
-              {isResolved ? t.reportResolved : "Waiting for Verification"}
+              {isResolved
+                ? t.reportResolved ||
+                  "This report is resolved and cannot be changed."
+                : "Waiting for Verification"}
             </span>
           </div>
         )}
@@ -738,10 +725,10 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                   fontWeight: "900",
                 }}
               >
-                WALK-IN REPORT
+                {t.walkInReport || "WALK-IN REPORT"}
               </h3>
               <p style={{ margin: 0, fontSize: "0.85rem", fontWeight: "600" }}>
-                No visual evidence provided.
+                {t.noVisualEvidence || "No visual evidence provided."}
               </p>
             </div>
           )}
@@ -749,7 +736,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
 
         <div className="detail-info-section" style={{ marginBottom: "15px" }}>
           <p>
-            <strong>ADDRESS:</strong>{" "}
+            <strong>{t.addressLabel || "ADDRESS:"}</strong>{" "}
             {[
               report.purok_sitio,
               report.barangays?.name,
@@ -760,10 +747,12 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               .join(", ") || "N/A"}
           </p>
           <p style={{ marginTop: "10px" }}>
-            <strong>DESC:</strong> {report.description || "N/A"}
+            <strong>{t.descLabel || "DESC:"}</strong>{" "}
+            {report.description || "N/A"}
           </p>
           <p style={{ marginTop: "10px" }}>
-            <strong>LANDMARK:</strong> {report.landmark || "N/A"}
+            <strong>{t.landmarkLabel || "LANDMARK:"}</strong>{" "}
+            {report.landmark || "N/A"}
           </p>
           {report.resolution_time && (
             <p
@@ -773,7 +762,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                 borderTop: "1px dashed #cbd5e1",
               }}
             >
-              <strong>RESOLUTION TIME:</strong>{" "}
+              <strong>{t.resolutionTimeLabel || "RESOLUTION TIME:"}</strong>{" "}
               <span style={{ color: "#16a34a" }}>{report.resolution_time}</span>
             </p>
           )}
@@ -799,7 +788,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                 fontWeight: "900",
               }}
             >
-              <MessageSquare size={20} /> ADMIN REMARKS
+              <MessageSquare size={20} /> {t.adminRemarks || "ADMIN REMARKS"}
             </div>
             <p style={{ margin: 0, color: "#78350f", fontWeight: "600" }}>
               {adminRemarks}
@@ -827,7 +816,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                 fontWeight: "900",
               }}
             >
-              <AlertCircle size={20} /> DELAY NOTICE
+              <AlertCircle size={20} /> {t.delayNotice || "DELAY NOTICE"}
             </div>
             <p style={{ margin: 0, color: "#991b1b", fontWeight: "600" }}>
               {report.delay_reason}
@@ -851,7 +840,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             marginBottom: "10px",
           }}
         >
-          <MapPin size={22} /> VIEW MAP
+          <MapPin size={22} /> {t.locationMap || "VIEW MAP"}
         </button>
 
         <div
@@ -889,7 +878,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               fontWeight: "900",
             }}
           >
-            <Users size={20} /> ASSIGNED TEAM
+            <Users size={20} /> {t.assignedTeam || "ASSIGNED TEAM"}
           </div>
           <p
             style={{
@@ -940,7 +929,8 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
                   margin: "0 0 10px 0",
                 }}
               >
-                ⚠️ Finish your "In Progress" task first
+                {t.finishInProgressFirst ||
+                  '⚠️ Finish your "In Progress" task first'}
               </p>
             )}
             <button
@@ -966,10 +956,10 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
             >
               <PlayCircle size={28} />{" "}
               {isCheckingActive
-                ? "Checking..."
+                ? t.checking || "Checking..."
                 : isSubmitting
-                  ? "Starting..."
-                  : "Start Work"}
+                  ? t.starting || "Starting..."
+                  : t.startWork || "Start Work"}
             </button>
           </>
         ) : (
@@ -991,12 +981,12 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
               opacity: isLocked || activeStatus !== "IN PROGRESS" ? 0.5 : 1,
             }}
           >
-            <CheckCircle size={28} /> Submit for Verification
+            <CheckCircle size={28} />{" "}
+            {t.submitForVerification || "Submit for Verification"}
           </button>
         )}
       </div>
 
-      {/* 🌟 RENDER THE MAP VIA PORTAL WITH NEW HORIZONTAL SLIDE */}
       {(isMapOpen || mapExitState) &&
         createPortal(
           <div

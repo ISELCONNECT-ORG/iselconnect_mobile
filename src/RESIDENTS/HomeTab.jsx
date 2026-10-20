@@ -4,9 +4,13 @@ import ResidentReportDetail from "./ResidentReportDetail";
 import HotlinesTab from "./HotlinesTab";
 import SatisfactionSurveyModal from "./SatisfactionSurveyModal";
 import { Clock, Wrench, CheckCircle, ClipboardList } from "lucide-react";
+import { translations, translateReportType } from "../components/translations";
 import "../Resident.css";
 
 function HomeTab() {
+  const currentLang = localStorage.getItem("appLanguage") || "English";
+  const t = translations[currentLang] || translations["English"];
+
   const [userName, setUserName] = useState("");
   const [userReports, setUserReports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,14 +24,13 @@ function HomeTab() {
   useEffect(() => {
     fetchHomeData();
 
-    // Listen to live changes on the reports table!
     const channel = supabase
       .channel("public:home_reports_channel")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "reports" },
         () => {
-          fetchHomeData(); // Pull fresh list on any change
+          fetchHomeData();
         },
       )
       .subscribe();
@@ -56,7 +59,6 @@ function HomeTab() {
         setUserName(`${userData.first_name} ${userData.last_name}`);
       }
 
-      // FETCHING COLUMNS
       const { data: reportsData, error: reportsError } = await supabase
         .from("reports")
         .select(
@@ -68,7 +70,6 @@ function HomeTab() {
       if (!reportsError && reportsData) {
         setUserReports(reportsData);
 
-        // Automatically update the open detail screen so it doesn't close!
         setSelectedReport((prevSelected) => {
           if (prevSelected) {
             const updated = reportsData.find((r) => r.id === prevSelected.id);
@@ -107,15 +108,19 @@ function HomeTab() {
       return "#16a34a";
     if (status === "IN PROGRESS" || status === "PENDING VERIFICATION")
       return "#0ea5e9";
-    if (status === "ON QUEUE") return "#9333ea"; // Purple for On Queue
+    if (status === "ON QUEUE") return "#9333ea";
     if (status === "REJECTED") return "#dc2626";
     return "#ca8a04";
   };
 
   const getDisplayStatus = (statusName) => {
     const status = statusName?.toUpperCase() || "PENDING";
-    if (status === "ADMIN VERIFIED" || status === "APPROVED") return "RESOLVED";
-    if (status === "PENDING VERIFICATION") return "IN PROGRESS";
+    if (status === "ADMIN VERIFIED" || status === "APPROVED")
+      return t.resolved || "RESOLVED";
+    if (status === "PENDING VERIFICATION") return t.inProgress || "IN PROGRESS";
+    if (status === "ON QUEUE") return t.onQueue || "ON QUEUE";
+    if (status === "PENDING") return t.pending || "PENDING";
+    if (status === "REJECTED") return t.reportRejected || "REJECTED";
     return status;
   };
 
@@ -123,15 +128,24 @@ function HomeTab() {
     const level = priorityLevel?.toUpperCase() || "NORMAL";
     switch (level) {
       case "CRITICAL":
-        return { text: "CRITICAL PRIORITY", color: "#ef4444" };
+        return {
+          text: t.criticalPriority || "CRITICAL PRIORITY",
+          color: "#ef4444",
+        };
       case "HIGH":
-        return { text: "HIGH PRIORITY", color: "#ea580c" };
+        return { text: t.highPriority || "HIGH PRIORITY", color: "#ea580c" };
       case "NORMAL":
-        return { text: "NORMAL PRIORITY", color: "#0284c7" };
+        return {
+          text: t.normalPriority || "NORMAL PRIORITY",
+          color: "#0284c7",
+        };
       case "LOW":
-        return { text: "LOW PRIORITY", color: "#10b981" };
+        return { text: t.lowPriority || "LOW PRIORITY", color: "#10b981" };
       default:
-        return { text: "NORMAL PRIORITY", color: "#0284c7" };
+        return {
+          text: t.normalPriority || "NORMAL PRIORITY",
+          color: "#0284c7",
+        };
     }
   };
 
@@ -159,7 +173,7 @@ function HomeTab() {
       return {
         bg: "rgba(250, 245, 255, 0.8)",
         border: "#d8b4fe",
-        text: "#7e22ce", // Purple styling for On Queue
+        text: "#7e22ce",
       };
     }
     if (status === "REJECTED") {
@@ -181,7 +195,6 @@ function HomeTab() {
     return s === "PENDING";
   }).length;
 
-  // 🌟 Added On Queue Count
   const onQueueCount = userReports.filter((r) => {
     const s = r.report_statuses?.name?.toUpperCase();
     return s === "ON QUEUE";
@@ -248,7 +261,6 @@ function HomeTab() {
 
   return (
     <>
-      {/* 🌟 NEW KEYFRAME ANIMATION FOR HOMETAB */}
       <style>{`
         @keyframes fadeSlideUp {
           from { opacity: 0; transform: translateY(15px); }
@@ -267,7 +279,6 @@ function HomeTab() {
         />
       )}
 
-      {/* LIQUID GLASS CONTAINER WITH SUBTLE MESH GRADIENT */}
       <div
         style={{
           padding: "30px 20px 120px 20px",
@@ -278,10 +289,9 @@ function HomeTab() {
           boxSizing: "border-box",
           background:
             "linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #eff6ff 100%)",
-          animation: "fadeSlideUp 0.35s ease-out forwards", // 🌟 ANIMATION APPLIED HERE
+          animation: "fadeSlideUp 0.35s ease-out forwards",
         }}
       >
-        {/* HEADER SECTION */}
         <div
           style={{
             display: "flex",
@@ -298,7 +308,7 @@ function HomeTab() {
                 fontWeight: "700",
               }}
             >
-              Hello
+              {t.hello || "Hello"}
             </p>
             <h2
               style={{
@@ -313,7 +323,6 @@ function HomeTab() {
             </h2>
           </div>
 
-          {/* LIQUID GLASS EMERGENCY BUTTON */}
           <button
             onClick={() => setShowHotlines(true)}
             style={{
@@ -341,13 +350,22 @@ function HomeTab() {
                 "rgba(255, 255, 255, 0.65)";
             }}
           >
-            EMERGENCY
-            <br />
-            HOTLINES
+            {currentLang === "Tagalog" ? (
+              <>
+                MGA EMERGENCY
+                <br />
+                HOTLINE
+              </>
+            ) : (
+              <>
+                EMERGENCY
+                <br />
+                HOTLINES
+              </>
+            )}
           </button>
         </div>
 
-        {/* LIQUID GLASS SUMMARY CARDS GRID */}
         <div
           style={{
             display: "grid",
@@ -355,7 +373,6 @@ function HomeTab() {
             gap: "14px",
           }}
         >
-          {/* PENDING CARD */}
           <div
             onClick={() => handleFilterClick("PENDING")}
             style={{
@@ -396,13 +413,13 @@ function HomeTab() {
                 fontSize: "0.7rem",
                 color: "#ca8a04",
                 fontWeight: "800",
+                textTransform: "uppercase",
               }}
             >
-              PENDING
+              {t.pending || "PENDING"}
             </p>
           </div>
 
-          {/* ON QUEUE CARD */}
           <div
             onClick={() => handleFilterClick("ON QUEUE")}
             style={{
@@ -449,13 +466,13 @@ function HomeTab() {
                 fontSize: "0.7rem",
                 color: "#9333ea",
                 fontWeight: "800",
+                textTransform: "uppercase",
               }}
             >
-              ON QUEUE
+              {t.onQueue || "ON QUEUE"}
             </p>
           </div>
 
-          {/* IN PROGRESS CARD */}
           <div
             onClick={() => handleFilterClick("IN PROGRESS")}
             style={{
@@ -498,13 +515,13 @@ function HomeTab() {
                 fontSize: "0.7rem",
                 color: "#0284c7",
                 fontWeight: "800",
+                textTransform: "uppercase",
               }}
             >
-              IN PROGRESS
+              {t.inProgress || "IN PROGRESS"}
             </p>
           </div>
 
-          {/* RESOLVED CARD */}
           <div
             onClick={() => handleFilterClick("RESOLVED")}
             style={{
@@ -551,14 +568,14 @@ function HomeTab() {
                 fontSize: "0.7rem",
                 color: "#16a34a",
                 fontWeight: "800",
+                textTransform: "uppercase",
               }}
             >
-              RESOLVED
+              {t.resolved || "RESOLVED"}
             </p>
           </div>
         </div>
 
-        {/* REPORTS LIST SECTION */}
         <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
           <div
             style={{
@@ -573,10 +590,10 @@ function HomeTab() {
                 fontSize: "1.5rem",
                 fontWeight: "900",
                 letterSpacing: "0.5px",
+                textTransform: "uppercase",
               }}
             >
-              <span style={{ color: "#ca8a04" }}>REPORT</span>{" "}
-              <span style={{ color: "#1b0b8c" }}>STATUS</span>
+              {t.reportStatus || "REPORT STATUS"}
             </h2>
 
             {filterStatus !== "ALL" && (
@@ -593,7 +610,7 @@ function HomeTab() {
                   padding: 0,
                 }}
               >
-                View All
+                {t.viewAll || "View All"}
               </button>
             )}
           </div>
@@ -610,7 +627,7 @@ function HomeTab() {
                   padding: "20px 0",
                 }}
               >
-                Loading your reports...
+                {t.loadingYourReports || "Loading your reports..."}
               </p>
             ) : filteredReports.length === 0 ? (
               <div
@@ -621,12 +638,12 @@ function HomeTab() {
                 }}
               >
                 <p style={{ fontWeight: "bold", margin: "0 0 5px 0" }}>
-                  No {filterStatus !== "ALL" ? filterStatus.toLowerCase() : ""}{" "}
-                  reports found.
+                  {t.noReportsFound || "No reports found."}
                 </p>
                 {filterStatus !== "ALL" && (
                   <p style={{ margin: 0, fontSize: "0.85rem" }}>
-                    Try selecting a different category.
+                    {t.tryDifferentCategory ||
+                      "Try selecting a different category."}
                   </p>
                 )}
               </div>
@@ -710,7 +727,13 @@ function HomeTab() {
                         lineHeight: "1.2",
                       }}
                     >
-                      {report.report_types?.name || "UNKNOWN ISSUE"}
+                      {/* 🌟 THIS TRANSLATES THE DATABASE REPORT TYPES */}
+                      {translateReportType(
+                        report.report_types?.name,
+                        currentLang,
+                      ) ||
+                        t.unknownIssue ||
+                        "UNKNOWN ISSUE"}
                     </h3>
                     <p
                       style={{
@@ -724,7 +747,7 @@ function HomeTab() {
                         lineHeight: "1.4",
                       }}
                     >
-                      {report.landmark || "No landmark"}
+                      {report.landmark || t.noLandmark || "No landmark"}
                     </p>
                   </div>
 

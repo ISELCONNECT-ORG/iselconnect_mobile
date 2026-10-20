@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { logSystemAction } from "../utils/logger";
-import { translations } from "../components/translations";
+import { translations, translateReportType } from "../components/translations";
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371e3;
@@ -241,7 +241,7 @@ const SearchableDropdown = ({
 
 function ReportTab({ isActive }) {
   const currentLang = localStorage.getItem("appLanguage") || "English";
-  const t = translations[currentLang];
+  const t = translations[currentLang] || translations["English"];
 
   const [verificationStatus, setVerificationStatus] = useState("loading");
   const [hasPendingReport, setHasPendingReport] = useState(false);
@@ -593,7 +593,6 @@ function ReportTab({ isActive }) {
     });
   };
 
-  // 🌟 NEW: Scroll window to top when opening camera
   const openCamera = () => {
     setIsCameraOpen(true);
   };
@@ -875,7 +874,7 @@ function ReportTab({ isActive }) {
           fontWeight: "bold",
         }}
       >
-        Checking account status...
+        {t.checkingAccountStatus || "Checking account status..."}
       </div>
     );
   }
@@ -932,7 +931,7 @@ function ReportTab({ isActive }) {
               letterSpacing: "0.5px",
             }}
           >
-            ACCOUNT RESTRICTED
+            {t.accountRestricted || "ACCOUNT RESTRICTED"}
           </h2>
 
           <p
@@ -945,8 +944,8 @@ function ReportTab({ isActive }) {
               padding: "0 10px",
             }}
           >
-            Your reporting privileges have been disabled by the administrator
-            due to policy violations.
+            {t.reportingDisabledAdmin ||
+              "Your reporting privileges have been disabled by the administrator due to policy violations."}
           </p>
 
           <div
@@ -969,7 +968,7 @@ function ReportTab({ isActive }) {
                 textTransform: "uppercase",
               }}
             >
-              Please contact support
+              {t.contactSupport || "Please contact support"}
             </span>
           </div>
         </div>
@@ -1032,7 +1031,9 @@ function ReportTab({ isActive }) {
               fontSize: "1.35rem",
             }}
           >
-            {isRejected ? "Verification Rejected" : "Account Pending Approval"}
+            {isRejected
+              ? t.verificationRejected || "Verification Rejected"
+              : t.accountPendingApproval || "Account Pending Approval"}
           </h2>
 
           <p
@@ -1045,8 +1046,10 @@ function ReportTab({ isActive }) {
             }}
           >
             {isRejected
-              ? "Your submitted verification details or eKYC photos were not approved by administrators. Please contact support or update your profile to re-verify."
-              : "Your account details and eKYC photos are currently under review by ISELCO-1 administrators. You will be able to report power outages and maintenance issues once your account is verified."}
+              ? t.kycRejectedDesc ||
+                "Your submitted verification details or eKYC photos were not approved by administrators. Please contact support or update your profile to re-verify."
+              : t.kycPendingDesc ||
+                "Your account details and eKYC photos are currently under review by ISELCO-1 administrators. You will be able to report power outages and maintenance issues once your account is verified."}
           </p>
 
           <div
@@ -1171,7 +1174,7 @@ function ReportTab({ isActive }) {
                   marginTop: "10px",
                 }}
               >
-                Clear Draft?
+                {t.clearDraftTitle || "Clear Draft?"}
               </h3>
               <p
                 className="modal-text"
@@ -1181,8 +1184,8 @@ function ReportTab({ isActive }) {
                   marginBottom: "25px",
                 }}
               >
-                Are you sure you want to clear your current report progress?
-                This action cannot be undone.
+                {t.clearDraftDesc ||
+                  "Are you sure you want to clear your current report progress? This action cannot be undone."}
               </p>
               <div style={{ display: "flex", gap: "10px" }}>
                 <button
@@ -1198,7 +1201,7 @@ function ReportTab({ isActive }) {
                   }}
                   onClick={() => setShowClearConfirmModal(false)}
                 >
-                  Cancel
+                  {t.cancelBtn || "Cancel"}
                 </button>
                 <button
                   style={{
@@ -1213,7 +1216,7 @@ function ReportTab({ isActive }) {
                   }}
                   onClick={handleClearForm}
                 >
-                  Yes, Clear
+                  {t.yesClearBtn || "Yes, Clear"}
                 </button>
               </div>
             </div>
@@ -1239,12 +1242,14 @@ function ReportTab({ isActive }) {
           >
             <div className="modal-box" style={{ margin: "0 20px" }}>
               <h3 className="modal-title" style={{ fontSize: "1.8rem" }}>
-                {t.reported}
+                {t.reported || "REPORTED"}
               </h3>
               <p
                 className="modal-text"
                 dangerouslySetInnerHTML={{
-                  __html: t.reportReview.replace("now", "now<br />"),
+                  __html: (
+                    t.reportReview || "Your report is now under review"
+                  ).replace("now", "now<br />"),
                 }}
               />
               <button
@@ -1323,7 +1328,11 @@ function ReportTab({ isActive }) {
                 WebkitTextStroke: "1px #1b0b8c",
               }}
             >
-              REPORT GUIDELINES
+              {t.reportGuidelinesTitle ||
+                t.reportGuidelines ||
+                (currentLang === "Tagalog"
+                  ? "MGA GABAY SA PAG-UULAT"
+                  : "REPORT GUIDELINES")}
             </h1>
             <p
               style={{
@@ -1334,7 +1343,8 @@ function ReportTab({ isActive }) {
                 marginBottom: "4px",
               }}
             >
-              Please read carefully to avoid account restrictions.
+              {t.readCarefully ||
+                "Please read carefully to avoid account restrictions."}
             </p>
 
             <div
@@ -1374,7 +1384,7 @@ function ReportTab({ isActive }) {
                       fontWeight: "900",
                     }}
                   >
-                    Accurate Location
+                    {t.accurateLocation || "Accurate Location"}
                   </h3>
                   <p
                     style={{
@@ -1384,9 +1394,8 @@ function ReportTab({ isActive }) {
                       lineHeight: "1.4",
                     }}
                   >
-                    Ensure your device GPS is turned on and VPNs are disabled
-                    before capturing a photo so linemen can locate the issue
-                    precisely.
+                    {t.accurateLocationDesc ||
+                      "Ensure your device GPS is turned on and VPNs are disabled before capturing a photo so linemen can locate the issue precisely."}
                   </p>
                 </div>
               </div>
@@ -1416,7 +1425,7 @@ function ReportTab({ isActive }) {
                       fontWeight: "900",
                     }}
                   >
-                    Clear Evidence
+                    {t.clearEvidence || "Clear Evidence"}
                   </h3>
                   <p
                     style={{
@@ -1426,8 +1435,8 @@ function ReportTab({ isActive }) {
                       lineHeight: "1.4",
                     }}
                   >
-                    Take a clear, real-time photo of the exact problem (e.g.,
-                    fallen pole, leaning wire, tree touching line).
+                    {t.clearEvidenceDesc ||
+                      "Take a clear, real-time photo of the exact problem (e.g., fallen pole, leaning wire, tree touching line)."}
                   </p>
                 </div>
               </div>
@@ -1457,7 +1466,7 @@ function ReportTab({ isActive }) {
                       fontWeight: "900",
                     }}
                   >
-                    Anti-Spam Policy
+                    {t.antiSpamPolicy || "Anti-Spam Policy"}
                   </h3>
                   <p
                     style={{
@@ -1467,9 +1476,8 @@ function ReportTab({ isActive }) {
                       lineHeight: "1.4",
                     }}
                   >
-                    Duplicate reports near existing issues will be blocked
-                    automatically. Continuous fake reports may result in account
-                    restriction.
+                    {t.antiSpamDesc ||
+                      "Duplicate reports near existing issues will be blocked automatically. Continuous fake reports may result in account restriction."}
                   </p>
                 </div>
               </div>
@@ -1503,7 +1511,7 @@ function ReportTab({ isActive }) {
                         fontWeight: "900",
                       }}
                     >
-                      Pending Report Active
+                      {t.pendingReportActive || "Pending Report Active"}
                     </h3>
                   </div>
                   <p
@@ -1514,12 +1522,14 @@ function ReportTab({ isActive }) {
                       lineHeight: "1.4",
                     }}
                   >
-                    You currently have a report awaiting review at{" "}
+                    {t.reportAwaitingReviewAt ||
+                      "You currently have a report awaiting review at"}{" "}
                     <strong style={{ color: "#d97706" }}>
                       {pendingReportDetails?.landmark || "your location"}
                     </strong>
                     .
                   </p>
+
                   <p
                     style={{
                       margin: 0,
@@ -1529,11 +1539,23 @@ function ReportTab({ isActive }) {
                       lineHeight: "1.3",
                     }}
                   >
-                    Are you reporting a{" "}
-                    <span style={{ color: "#1b0b8c", fontWeight: "900" }}>
-                      new and different damage
-                    </span>
-                    ?
+                    {currentLang === "Tagalog" ? (
+                      <>
+                        Nagre-report ka ba ng{" "}
+                        <span style={{ color: "#1b0b8c", fontWeight: "900" }}>
+                          bago at ibang sira
+                        </span>
+                        ?
+                      </>
+                    ) : (
+                      <>
+                        Are you reporting a{" "}
+                        <span style={{ color: "#1b0b8c", fontWeight: "900" }}>
+                          new and different damage
+                        </span>
+                        ?
+                      </>
+                    )}
                   </p>
                 </div>
               )}
@@ -1567,11 +1589,13 @@ function ReportTab({ isActive }) {
               >
                 {hasPendingReport ? (
                   <>
-                    YES, NEW REPORT <ArrowRight size={18} />
+                    {t.yesNewReport || "YES, NEW REPORT"}{" "}
+                    <ArrowRight size={18} />
                   </>
                 ) : (
                   <>
-                    <CheckCircle size={18} /> I UNDERSTAND & PROCEED
+                    <CheckCircle size={18} />{" "}
+                    {t.understandProceed || "I UNDERSTAND & PROCEED"}
                   </>
                 )}
               </button>
@@ -1641,7 +1665,7 @@ function ReportTab({ isActive }) {
 
               <div
                 data-field="photo"
-                onClick={openCamera} // 🌟 UPDATED: Triggers openCamera which scrolls to top first
+                onClick={openCamera}
                 style={{
                   width: "100%",
                   height: "240px",
@@ -1684,7 +1708,7 @@ function ReportTab({ isActive }) {
                         color: "#1e293b",
                       }}
                     >
-                      {t.capturePhoto}
+                      {t.capturePhoto || "CAPTURE A PHOTO"}
                     </h2>
                   </div>
                 )}
@@ -1732,7 +1756,7 @@ function ReportTab({ isActive }) {
                           textTransform: "uppercase",
                         }}
                       >
-                        Incident Geo-Tag
+                        {t.incidentGeoTag || "Incident Geo-Tag"}
                       </span>
                       <span
                         style={{
@@ -1746,10 +1770,10 @@ function ReportTab({ isActive }) {
                         }}
                       >
                         {coordinates.lat === "Fetching..."
-                          ? "Acquiring GPS signal..."
+                          ? t.acquiringGps || "Acquiring GPS signal..."
                           : coordinates.lat
                             ? `LAT: ${coordinates.lat}, LON: ${coordinates.lon}`
-                            : "No coordinates captured"}
+                            : t.noCoordinates || "No coordinates captured"}
                       </span>
                     </div>
                   </div>
@@ -1794,7 +1818,7 @@ function ReportTab({ isActive }) {
                   options={municipalities}
                   value={formData.municipality_id}
                   onChange={handleInputChange}
-                  placeholder={t.incidentMun}
+                  placeholder={t.incidentMun || "Incident Municipality"}
                   hasError={!!fieldErrors.municipality_id}
                 />
               </div>
@@ -1808,8 +1832,8 @@ function ReportTab({ isActive }) {
                   onChange={handleInputChange}
                   placeholder={
                     !formData.municipality_id
-                      ? "Select Municipality first"
-                      : t.incidentBrgy
+                      ? t.selectMunicipalityFirst || "Select Municipality first"
+                      : t.incidentBrgy || "Incident Barangay"
                   }
                   disabled={!formData.municipality_id}
                   hasError={!!fieldErrors.barangay_id}
@@ -1821,7 +1845,7 @@ function ReportTab({ isActive }) {
                 <input
                   type="text"
                   name="purok_sitio"
-                  placeholder={t.purokSitio}
+                  placeholder={t.purokSitio || "Purok / Sitio (Optional)"}
                   value={formData.purok_sitio}
                   onChange={handleInputChange}
                   style={{
@@ -1845,12 +1869,16 @@ function ReportTab({ isActive }) {
                   message={fieldErrors.report_type_id}
                   overlap={false}
                 />
+                {/* 🌟 THIS TRANSLATES THE DATABASE REPORT TYPES DROPDOWN */}
                 <SearchableDropdown
                   name="report_type_id"
-                  options={reportTypes}
+                  options={reportTypes.map((rt) => ({
+                    ...rt,
+                    name: translateReportType(rt.name, currentLang),
+                  }))}
                   value={formData.report_type_id}
                   onChange={handleInputChange}
-                  placeholder={t.reportType}
+                  placeholder={t.reportType || "Report Type"}
                   hasError={!!fieldErrors.report_type_id}
                 />
               </div>
@@ -1889,7 +1917,7 @@ function ReportTab({ isActive }) {
                   placeholder={
                     isOtherSelected
                       ? "Describe the issue/damage (Required) *"
-                      : t.descOptional
+                      : t.descOptional || "Description (Optional)"
                   }
                   value={formData.description}
                   onChange={handleInputChange}
@@ -1991,14 +2019,15 @@ function ReportTab({ isActive }) {
                   (e.currentTarget.style.transform = "scale(1)")
                 }
               >
-                {isSubmitting ? t.submitting : t.submit}
+                {isSubmitting
+                  ? t.submitting || "SUBMITTING..."
+                  : t.submit || "SUBMIT"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 🌟 FIX: FORCED FIXED VIEWPORT SO CAMERA ALWAYS COVERS FULL SCREEN REGARDLESS OF SCROLL */}
       {(isCameraOpen || cameraExitState) &&
         createPortal(
           <div
@@ -2049,7 +2078,7 @@ function ReportTab({ isActive }) {
                 <ChevronLeft size={32} color="#fff" />
               </button>
               <span style={{ color: "#fff", fontWeight: "bold" }}>
-                {t.evidenceCamera}
+                {t.evidenceCamera || "EVIDENCE CAMERA"}
               </span>
               <div style={{ width: 32 }}></div>
             </div>
@@ -2098,7 +2127,7 @@ function ReportTab({ isActive }) {
                   fontSize: "0.9rem",
                 }}
               >
-                {t.capturePhoto}
+                {t.capturePhoto || "CAPTURE A PHOTO"}
               </p>
               <button
                 onClick={capture}

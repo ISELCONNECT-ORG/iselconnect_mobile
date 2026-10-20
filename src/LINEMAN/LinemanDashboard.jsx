@@ -23,7 +23,7 @@ function LinemanDashboard() {
 
   const [needsPasswordChange, setNeedsPasswordChange] = useState(false);
 
-  // 🌟 NEW: State to track if there are unread notifications for the nav badge
+  // Track if there are unread notifications for the nav badge
   const [hasUnreadNotifs, setHasUnreadNotifs] = useState(false);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ function LinemanDashboard() {
     fetchDutyStatus();
   }, []);
 
-  // 🌟 NEW: Centralized function to check all unread notifications for Linemen
+  // Centralized function to check all unread notifications for Linemen
   const checkUnreadStatus = useCallback(async () => {
     try {
       const {
@@ -92,7 +92,7 @@ function LinemanDashboard() {
     }
   }, []);
 
-  // 🌟 NEW: Listen for Database changes AND local storage memory updates
+  // Listen for Database changes AND local storage memory updates
   useEffect(() => {
     checkUnreadStatus();
 
@@ -186,8 +186,21 @@ function LinemanDashboard() {
         flexDirection: "column",
         height: "100vh",
         position: "relative",
+        backgroundColor: "#f8fafc", // Unifies the background color
       }}
     >
+      {/* 🌟 NEW: SYNCHRONIZED DASHBOARD ANIMATIONS */}
+      <style>{`
+        @keyframes dashTabFadeUp {
+          from { opacity: 0; transform: translateY(15px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes dashNavPopUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
       {needsPasswordChange && (
         <ForcePasswordChange onComplete={() => setNeedsPasswordChange(false)} />
       )}
@@ -258,13 +271,14 @@ function LinemanDashboard() {
       )}
 
       <div
-        key={activeTab}
-        className="animate-tab-switch l-rt-tab"
+        key={activeTab} // Retaining key to reset scroll position on tab switch
         style={{
           width: "100%",
           flex: 1,
           overflowY: "auto",
           paddingBottom: "80px",
+          // 🌟 REMOVED OLD CLASS & REPLACED WITH SMOOTH FADESLIDEUP
+          animation: "dashTabFadeUp 0.35s ease-out forwards",
         }}
       >
         {activeTab === "report" && (
@@ -281,7 +295,11 @@ function LinemanDashboard() {
         {activeTab === "profile" && <ProfileTab />}
       </div>
 
-      <div className="bottom-nav-wrapper">
+      <div
+        className="bottom-nav-wrapper"
+        // 🌟 ANIMATE NAV BAR SO IT POPS UP SMOOTHLY EVERY TIME IT MOUNTS
+        style={{ animation: "dashNavPopUp 0.4s ease-out forwards" }}
+      >
         <div className="pill-nav">
           <button
             className={`nav-item ${activeTab === "report" ? "active" : ""}`}
@@ -302,7 +320,6 @@ function LinemanDashboard() {
             <span>Logs</span>
           </button>
 
-          {/* 🌟 UPDATED NOTIFICATION BUTTON WITH BLUE DOT INDICATOR */}
           <button
             className={`nav-item ${activeTab === "notification" ? "active" : ""}`}
             onClick={() => setActiveTab("notification")}

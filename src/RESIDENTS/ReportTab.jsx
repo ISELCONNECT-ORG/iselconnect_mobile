@@ -45,8 +45,6 @@ const ISABELA_BOUNDS = {
 
 const MAX_ACCEPTABLE_ACCURACY_METERS = 250;
 
-const REPORT_HEADER_BG = "#1b0b8c";
-
 const isWithinServiceArea = (lat, lon) => {
   const numLat = parseFloat(lat);
   const numLon = parseFloat(lon);
@@ -250,10 +248,11 @@ function ReportTab({ isActive }) {
   const [pendingReportDetails, setPendingReportDetails] = useState(null);
   const [isBanned, setIsBanned] = useState(false);
 
-  const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(() => {
-    return localStorage.getItem("report_draft_guidelines") === "true";
-  });
+  const [hasAcceptedGuidelines, setHasAcceptedGuidelines] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
+  const [cameraExitState, setCameraExitState] = useState(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   const [imagePreview, setImagePreview] = useState(() => {
@@ -290,7 +289,6 @@ function ReportTab({ isActive }) {
   });
 
   useEffect(() => {
-    localStorage.setItem("report_draft_guidelines", hasAcceptedGuidelines);
     if (imagePreview) {
       try {
         localStorage.setItem("report_draft_image", imagePreview);
@@ -300,7 +298,7 @@ function ReportTab({ isActive }) {
     }
     localStorage.setItem("report_draft_coords", JSON.stringify(coordinates));
     localStorage.setItem("report_draft_form", JSON.stringify(formData));
-  }, [hasAcceptedGuidelines, imagePreview, coordinates, formData]);
+  }, [imagePreview, coordinates, formData]);
 
   const webcamRef = useRef(null);
   const formContainerRef = useRef(null);
@@ -313,78 +311,93 @@ function ReportTab({ isActive }) {
     selectedReportTypeObj?.name?.toLowerCase().includes("not specified");
 
   const handleClearForm = () => {
-    setImagePreview(null);
-    setCoordinates({ lat: "", lon: "" });
-    setFormData({
-      report_type_id: "",
-      municipality_id: "",
-      barangay_id: "",
-      purok_sitio: "",
-      landmark: "",
-      description: "",
-    });
-    setFieldErrors({});
-    setError("");
-
-    localStorage.removeItem("report_draft_image");
-    localStorage.removeItem("report_draft_coords");
-    localStorage.removeItem("report_draft_form");
     setShowClearConfirmModal(false);
+    setIsClearing(true);
+
+    setTimeout(() => {
+      setImagePreview(null);
+      setCoordinates({ lat: "", lon: "" });
+      setFormData({
+        report_type_id: "",
+        municipality_id: "",
+        barangay_id: "",
+        purok_sitio: "",
+        landmark: "",
+        description: "",
+      });
+      setFieldErrors({});
+      setError("");
+
+      localStorage.removeItem("report_draft_image");
+      localStorage.removeItem("report_draft_coords");
+      localStorage.removeItem("report_draft_form");
+
+      setIsClearing(false);
+    }, 250);
+  };
+
+  const handleAcceptGuidelines = () => {
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setHasAcceptedGuidelines(true);
+      setIsTransitioning(false);
+    }, 250);
   };
 
   useEffect(() => {
     const checkUserStatus = async () => {
       try {
         const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser();
+          data: { session },
+        } = await supabase.auth.getSession();
+        const user = session?.user;
 
-        if (user && !authError) {
-          const { data: userData, error: userDbError } = await supabase
+        if (!user) {
+          setVerificationStatus("pending");
+          return;
+        }
+
+        const [userRes, verRes, reportsRes] = await Promise.all([
+          supabase
             .from("users")
             .select("ban_status")
             .eq("id", user.id)
-            .single();
-
-          if (userData && !userDbError && userData.ban_status === true) {
-            setIsBanned(true);
-            setVerificationStatus("approved");
-            return;
-          }
-
-          const { data: verData, error: dbError } = await supabase
+            .single(),
+          supabase
             .from("user_verifications")
             .select("verification_status")
             .eq("user_id", user.id)
-            .single();
-
-          if (verData && !dbError) {
-            setVerificationStatus(verData.verification_status || "pending");
-          } else {
-            setVerificationStatus("pending");
-          }
-
-          const { data: reportsData, error: reportsError } = await supabase
+            .maybeSingle(),
+          supabase
             .from("reports")
             .select(
               "id, landmark, created_at, latitude, longitude, report_type_id, report_statuses(name)",
             )
-            .eq("residents_id", user.id);
+            .eq("residents_id", user.id),
+        ]);
 
-          if (!reportsError && reportsData) {
-            const activeReport = reportsData.find((r) => {
-              const statusName = r.report_statuses?.name?.toUpperCase() || "";
-              return statusName === "PENDING";
-            });
+        if (userRes.data?.ban_status === true) {
+          setIsBanned(true);
+          setVerificationStatus("approved");
+          return;
+        }
 
-            if (activeReport) {
-              setHasPendingReport(true);
-              setPendingReportDetails(activeReport);
-            } else {
-              setHasPendingReport(false);
-              setPendingReportDetails(null);
-            }
+        if (verRes.data?.verification_status) {
+          setVerificationStatus(verRes.data.verification_status);
+        } else {
+          setVerificationStatus("pending");
+        }
+
+        if (reportsRes.data) {
+          const activeReport = reportsRes.data.find(
+            (r) => r.report_statuses?.name?.toUpperCase() === "PENDING",
+          );
+          if (activeReport) {
+            setHasPendingReport(true);
+            setPendingReportDetails(activeReport);
+          } else {
+            setHasPendingReport(false);
+            setPendingReportDetails(null);
           }
         }
       } catch (err) {
@@ -399,7 +412,12 @@ function ReportTab({ isActive }) {
   }, [isActive]);
 
   useEffect(() => {
-    if (showSuccessModal || showClearConfirmModal) {
+    if (
+      showSuccessModal ||
+      showClearConfirmModal ||
+      isCameraOpen ||
+      cameraExitState
+    ) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
@@ -407,7 +425,7 @@ function ReportTab({ isActive }) {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [showSuccessModal, showClearConfirmModal]);
+  }, [showSuccessModal, showClearConfirmModal, isCameraOpen, cameraExitState]);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -549,7 +567,7 @@ function ReportTab({ isActive }) {
 
   useEffect(() => {
     const navBar = document.querySelector(".bottom-nav-wrapper");
-    if (isCameraOpen) {
+    if (isCameraOpen || cameraExitState) {
       if (navBar) navBar.style.display = "none";
     } else {
       if (navBar) navBar.style.display = "";
@@ -557,7 +575,7 @@ function ReportTab({ isActive }) {
     return () => {
       if (navBar) navBar.style.display = "";
     };
-  }, [isCameraOpen]);
+  }, [isCameraOpen, cameraExitState]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -575,10 +593,24 @@ function ReportTab({ isActive }) {
     });
   };
 
-  const capture = useCallback(async () => {
+  // 🌟 NEW: Scroll window to top when opening camera
+  const openCamera = () => {
+    setIsCameraOpen(true);
+  };
+
+  const handleCloseCamera = () => {
+    setCameraExitState("back");
+    setTimeout(() => {
+      setIsCameraOpen(false);
+      setCameraExitState(null);
+    }, 250);
+  };
+
+  const capture = useCallback(() => {
     const imageSrc = webcamRef.current.getScreenshot();
+
+    setCameraExitState("capture");
     setImagePreview(imageSrc);
-    setIsCameraOpen(false);
     setCoordinates({ lat: "Fetching...", lon: "Fetching..." });
     setError("");
     setFieldErrors((prev) => {
@@ -588,63 +620,68 @@ function ReportTab({ isActive }) {
       return next;
     });
 
-    try {
-      let permissions = await Geolocation.checkPermissions();
-      if (permissions.location !== "granted") {
-        permissions = await Geolocation.requestPermissions();
-      }
+    setTimeout(async () => {
+      setIsCameraOpen(false);
+      setCameraExitState(null);
 
-      if (permissions.location !== "granted") {
-        throw new Error("Location permission denied. Cannot fetch GPS.");
-      }
+      try {
+        let permissions = await Geolocation.checkPermissions();
+        if (permissions.location !== "granted") {
+          permissions = await Geolocation.requestPermissions();
+        }
 
-      const position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 20000,
-      });
+        if (permissions.location !== "granted") {
+          throw new Error("Location permission denied. Cannot fetch GPS.");
+        }
 
-      const { latitude, longitude, accuracy } = position.coords;
+        const position = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 20000,
+        });
 
-      if (!isWithinServiceArea(latitude, longitude)) {
-        setImagePreview(null);
-        setCoordinates({ lat: "", lon: "" });
-        setFieldErrors((prev) => ({
-          ...prev,
-          coordinates: "Location blocked.",
-        }));
+        const { latitude, longitude, accuracy } = position.coords;
+
+        if (!isWithinServiceArea(latitude, longitude)) {
+          setImagePreview(null);
+          setCoordinates({ lat: "", lon: "" });
+          setFieldErrors((prev) => ({
+            ...prev,
+            coordinates: "Location blocked.",
+          }));
+          setError(
+            "Detected location is outside the ISELCO-1 service area. Please turn OFF any active VPN and ensure your device GPS is enabled before capturing.",
+          );
+          return;
+        }
+
+        if (accuracy && accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+          setImagePreview(null);
+          setCoordinates({ lat: "", lon: "" });
+          setFieldErrors((prev) => ({
+            ...prev,
+            coordinates: "Signal too weak.",
+          }));
+          setError(
+            `GPS signal is too inaccurate (±${Math.round(
+              accuracy,
+            )}m). Please disable any active VPN, enable 'Precise Location', and step outside.`,
+          );
+          return;
+        }
+
+        setCoordinates({
+          lat: latitude.toFixed(6),
+          lon: longitude.toFixed(6),
+        });
+      } catch (err) {
+        console.error("Location access failed:", err);
         setError(
-          "Detected location is outside the ISELCO-1 service area. Please turn OFF any active VPN and ensure your device GPS is enabled before capturing.",
+          "Failed to get precise GPS lock. Please step outside for a clear view of the sky and ensure your device settings allow 'Precise Location'.",
         );
-        return;
-      }
-
-      if (accuracy && accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
-        setImagePreview(null);
         setCoordinates({ lat: "", lon: "" });
-        setFieldErrors((prev) => ({
-          ...prev,
-          coordinates: "Signal too weak.",
-        }));
-        setError(
-          `GPS signal is too inaccurate (±${Math.round(
-            accuracy,
-          )}m). Please disable any active VPN, enable 'Precise Location', and step outside.`,
-        );
-        return;
       }
-
-      setCoordinates({
-        lat: latitude.toFixed(6),
-        lon: longitude.toFixed(6),
-      });
-    } catch (err) {
-      console.error("Location access failed:", err);
-      setError(
-        "Failed to get precise GPS lock. Please step outside for a clear view of the sky and ensure your device settings allow 'Precise Location'.",
-      );
-      setCoordinates({ lat: "", lon: "" });
-    }
+    }, 250);
   }, [webcamRef]);
 
   const base64ToBlob = (base64, mimeType = "image/jpeg") => {
@@ -1053,16 +1090,40 @@ function ReportTab({ isActive }) {
       style={{
         overscrollBehavior: "none",
         backgroundColor: "#f8fafc",
-        ...(hasAcceptedGuidelines && !isCameraOpen
-          ? { padding: 0, margin: 0, minHeight: "100vh" }
-          : {}),
-        height: !hasAcceptedGuidelines && !isCameraOpen ? "100vh" : "auto",
-        overflow:
-          !hasAcceptedGuidelines && !isCameraOpen ? "hidden" : "visible",
+        minHeight: "100vh",
+        width: "100%",
         display: "flex",
         flexDirection: "column",
+        position: "relative",
       }}
     >
+      <style>{`
+        @keyframes fadeSlideUp {
+          from { opacity: 0; transform: translateY(15px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOutUp {
+          from { opacity: 1; transform: translateY(0); }
+          to { opacity: 0; transform: translateY(-15px); }
+        }
+        @keyframes slideInUpCamera {
+          from { transform: translateY(100vh); }
+          to { transform: translateY(0); }
+        }
+        @keyframes slideOutUpCamera {
+          from { transform: translateY(0); }
+          to { transform: translateY(-100vh); }
+        }
+        @keyframes slideOutDownCamera {
+          from { transform: translateY(0); }
+          to { transform: translateY(100vh); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+      `}</style>
+
       {showClearConfirmModal &&
         createPortal(
           <div
@@ -1207,7 +1268,6 @@ function ReportTab({ isActive }) {
                     description: "",
                   });
 
-                  localStorage.removeItem("report_draft_guidelines");
                   localStorage.removeItem("report_draft_image");
                   localStorage.removeItem("report_draft_coords");
                   localStorage.removeItem("report_draft_form");
@@ -1238,6 +1298,9 @@ function ReportTab({ isActive }) {
             padding: "0 16px 100px 16px",
             boxSizing: "border-box",
             overflow: "hidden",
+            animation: isTransitioning
+              ? "fadeOutUp 0.25s ease forwards"
+              : "fadeSlideUp 0.35s ease-out forwards",
           }}
         >
           <div
@@ -1249,7 +1312,6 @@ function ReportTab({ isActive }) {
               gap: "10px",
             }}
           >
-            {/* 🌟 ENHANCED GUIDELINES TITLE */}
             <h1
               className="report-title"
               style={{
@@ -1477,7 +1539,7 @@ function ReportTab({ isActive }) {
               )}
 
               <button
-                onClick={() => setHasAcceptedGuidelines(true)}
+                onClick={handleAcceptGuidelines}
                 style={{
                   backgroundColor: "#1b0b8c",
                   color: "#ffffff",
@@ -1516,7 +1578,7 @@ function ReportTab({ isActive }) {
             </div>
           </div>
         </div>
-      ) : !isCameraOpen ? (
+      ) : (
         <div
           className="report-form-container"
           ref={formContainerRef}
@@ -1525,6 +1587,7 @@ function ReportTab({ isActive }) {
             display: "flex",
             flexDirection: "column",
             flex: 1,
+            animation: "fadeSlideUp 0.35s ease-out forwards",
           }}
         >
           <div
@@ -1543,7 +1606,6 @@ function ReportTab({ isActive }) {
               borderBottom: "1px solid rgba(255,255,255,0.1)",
             }}
           >
-            {/* 🌟 ENHANCED REPORT TITLE */}
             <h1
               className="report-title"
               style={{
@@ -1567,6 +1629,11 @@ function ReportTab({ isActive }) {
               backgroundColor: "#f8fafc",
               padding: "8px 16px 120px 16px",
               boxSizing: "border-box",
+              transition: "all 0.25s ease-in-out",
+              opacity: isClearing ? 0 : 1,
+              transform: isClearing
+                ? "translateY(10px) scale(0.98)"
+                : "translateY(0) scale(1)",
             }}
           >
             <div>
@@ -1574,7 +1641,7 @@ function ReportTab({ isActive }) {
 
               <div
                 data-field="photo"
-                onClick={() => setIsCameraOpen(true)}
+                onClick={openCamera} // 🌟 UPDATED: Triggers openCamera which scrolls to top first
                 style={{
                   width: "100%",
                   height: "240px",
@@ -1599,6 +1666,7 @@ function ReportTab({ isActive }) {
                       width: "100%",
                       height: "100%",
                       objectFit: "cover",
+                      animation: "fadeIn 0.4s ease-in-out forwards",
                     }}
                   />
                 ) : (
@@ -1928,111 +1996,136 @@ function ReportTab({ isActive }) {
             </div>
           </div>
         </div>
-      ) : (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100vw",
-            height: "100vh",
-            background: "#000",
-            zIndex: 99999,
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
+      )}
+
+      {/* 🌟 FIX: FORCED FIXED VIEWPORT SO CAMERA ALWAYS COVERS FULL SCREEN REGARDLESS OF SCROLL */}
+      {(isCameraOpen || cameraExitState) &&
+        createPortal(
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "20px 15px",
-              background: "#000",
-              flexShrink: 0,
-            }}
-          >
-            <button
-              onClick={() => setIsCameraOpen(false)}
-              style={{
-                background: "transparent",
-                border: "none",
-                padding: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-              }}
-            >
-              <ChevronLeft size={32} color="#fff" />
-            </button>
-            <span style={{ color: "#fff", fontWeight: "bold" }}>
-              {t.evidenceCamera}
-            </span>
-            <div style={{ width: 32 }}></div>
-          </div>
-          <div
-            style={{
-              flex: 1,
-              position: "relative",
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
               width: "100%",
-              background: "#111",
-              overflow: "hidden",
-            }}
-          >
-            <Webcam
-              audio={false}
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              videoConstraints={{ facingMode: "environment" }}
-              mirrored={false}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
-            />
-          </div>
-          <div
-            style={{
-              background: "#e2e8f0",
-              padding: "20px 15px 40px 15px",
+              height: "100dvh",
+              background: "#000",
+              zIndex: 99999,
               display: "flex",
               flexDirection: "column",
-              alignItems: "center",
-              flexShrink: 0,
-              borderTopLeftRadius: "30px",
-              borderTopRightRadius: "30px",
+              overflow: "hidden",
+              overscrollBehavior: "none",
+              animation:
+                cameraExitState === "capture"
+                  ? "slideOutUpCamera 0.25s ease-in forwards"
+                  : cameraExitState === "back"
+                    ? "slideOutDownCamera 0.25s ease-in forwards"
+                    : "slideInUpCamera 0.3s ease-out forwards",
             }}
           >
-            <p
+            <div
               style={{
-                margin: "0 0 15px 0",
-                color: "#111",
-                fontWeight: "900",
-                fontSize: "0.9rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "20px 15px",
+                background: "#000",
+                flexShrink: 0,
               }}
             >
-              {t.capturePhoto}
-            </p>
-            <button
-              onClick={capture}
+              <button
+                onClick={handleCloseCamera}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                }}
+              >
+                <ChevronLeft size={32} color="#fff" />
+              </button>
+              <span style={{ color: "#fff", fontWeight: "bold" }}>
+                {t.evidenceCamera}
+              </span>
+              <div style={{ width: 32 }}></div>
+            </div>
+            <div
               style={{
-                width: "70px",
-                height: "70px",
-                borderRadius: "50%",
-                background: "#cbd5e1",
-                border: "5px solid #fff",
-                boxShadow: "0 0 0 3px #000",
-                cursor: "pointer",
+                flex: 1,
+                position: "relative",
+                width: "100%",
+                background: "#111",
+                overflow: "hidden",
               }}
-            ></button>
-          </div>
-        </div>
-      )}
+            >
+              <Webcam
+                audio={false}
+                ref={webcamRef}
+                screenshotFormat="image/jpeg"
+                videoConstraints={{ facingMode: "environment" }}
+                mirrored={false}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
+              />
+            </div>
+            <div
+              style={{
+                background: "#e2e8f0",
+                padding: "20px 15px 40px 15px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                flexShrink: 0,
+                borderTopLeftRadius: "30px",
+                borderTopRightRadius: "30px",
+              }}
+            >
+              <p
+                style={{
+                  margin: "0 0 15px 0",
+                  color: "#111",
+                  fontWeight: "900",
+                  fontSize: "0.9rem",
+                }}
+              >
+                {t.capturePhoto}
+              </p>
+              <button
+                onClick={capture}
+                onMouseDown={(e) =>
+                  (e.currentTarget.style.transform = "scale(0.9)")
+                }
+                onMouseUp={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
+                style={{
+                  width: "70px",
+                  height: "70px",
+                  borderRadius: "50%",
+                  background: "#cbd5e1",
+                  border: "5px solid #fff",
+                  boxShadow: "0 0 0 3px #000",
+                  cursor: "pointer",
+                  transition: "transform 0.15s ease",
+                }}
+              ></button>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

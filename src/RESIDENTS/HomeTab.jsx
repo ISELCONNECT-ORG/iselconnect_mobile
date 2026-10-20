@@ -248,6 +248,14 @@ function HomeTab() {
 
   return (
     <>
+      {/* 🌟 NEW KEYFRAME ANIMATION FOR HOMETAB */}
+      <style>{`
+        @keyframes fadeSlideUp {
+          from { opacity: 0; transform: translateY(15px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
       {reportToRate && (
         <SatisfactionSurveyModal
           report={reportToRate}
@@ -270,6 +278,7 @@ function HomeTab() {
           boxSizing: "border-box",
           background:
             "linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #eff6ff 100%)",
+          animation: "fadeSlideUp 0.35s ease-out forwards", // 🌟 ANIMATION APPLIED HERE
         }}
       >
         {/* HEADER SECTION */}
@@ -393,7 +402,7 @@ function HomeTab() {
             </p>
           </div>
 
-          {/* 🌟 NEW: ON QUEUE CARD */}
+          {/* ON QUEUE CARD */}
           <div
             onClick={() => handleFilterClick("ON QUEUE")}
             style={{

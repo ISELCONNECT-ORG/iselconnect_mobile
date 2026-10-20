@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Home, Zap, Camera as CameraIcon, Bell, User } from "lucide-react";
 import HomeTab from "./HomeTab";
 import AdvisoryTab from "./AdvisoryTab";
@@ -14,7 +15,6 @@ import { supabase } from "../supabaseClient";
 import { getPendingNotificationData } from "../utils/pushNotifications";
 
 function ResidentDashboard({ session, onLogout }) {
-  // 🌟 FIX: REMEMBERS YOUR ACTIVE TAB ON REFRESH
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem("resident_active_tab") || "home";
   });
@@ -23,7 +23,9 @@ function ResidentDashboard({ session, onLogout }) {
   const [selectedReport, setSelectedReport] = useState(null);
   const [hasUnreadNotifs, setHasUnreadNotifs] = useState(false);
 
-  // 🌟 FIX: SAVES TAB CHANGES INSTANTLY
+  // 🌟 NEW: Track closing state to synchronize the multi-layer animations
+  const [closingReport, setClosingReport] = useState(false);
+
   useEffect(() => {
     localStorage.setItem("resident_active_tab", activeTab);
   }, [activeTab]);
@@ -137,7 +139,7 @@ function ResidentDashboard({ session, onLogout }) {
       )
       .subscribe();
 
-    const memoryPoller = setInterval(checkUnreadStatus, 2000);
+    const memoryPoller = setInterval(checkUnreadStatus, 30000);
 
     return () => {
       supabase.removeChannel(channel);
@@ -181,26 +183,83 @@ function ResidentDashboard({ session, onLogout }) {
     };
   }, []);
 
-  if (selectedReport) {
-    return (
-      <AccountBlockedGuard>
-        <ResidentReportDetail
-          report={selectedReport}
-          onBack={() => setSelectedReport(null)}
-          onReportUpdated={() => setSelectedReport(null)}
-        />
-      </AccountBlockedGuard>
-    );
-  }
+  // 🌟 NEW: Master handler for sliding out the detail screen while the list fades back up
+  const handleCloseReport = () => {
+    setClosingReport(true);
+    setTimeout(() => {
+      setSelectedReport(null);
+      setClosingReport(false);
+    }, 250);
+  };
 
   return (
     <AccountBlockedGuard>
-      <div className="dashboard-layout">
+      <div className="dashboard-layout" style={{ position: "relative" }}>
+        {/* 🌟 NEW: SYNCHRONIZED DASHBOARD ANIMATIONS */}
+        <style>{`
+          @keyframes dashTabFadeUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes dashNavPopUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes fadeSlideDownList {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(15px); }
+          }
+          @keyframes slideInRightDetail {
+            from { transform: translateX(100vw); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+          }
+          @keyframes slideOutRightDetail {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100vw); opacity: 0; }
+          }
+        `}</style>
+
         <AreaAlertPopup />
+
+        {/* 🌟 RENDER DETAIL VIEW AS A PORTAL SO IT DOESN'T DESTROY THE TABS BELOW */}
+        {(selectedReport || closingReport) &&
+          createPortal(
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100vw",
+                height: "100dvh",
+                zIndex: 99999,
+                backgroundColor: "#f8fafc",
+                overflow: "hidden",
+                animation: closingReport
+                  ? "slideOutRightDetail 0.25s ease forwards"
+                  : "slideInRightDetail 0.3s ease-out forwards",
+              }}
+            >
+              {selectedReport && (
+                <ResidentReportDetail
+                  report={selectedReport}
+                  onBack={handleCloseReport}
+                  onReportUpdated={handleCloseReport}
+                />
+              )}
+            </div>,
+            document.body,
+          )}
 
         <main
           key={activeTab}
-          className="dashboard-main-content animate-tab-switch"
+          className="dashboard-main-content"
+          style={{
+            // 🌟 ANIMATE CONTENT TO FADE UP ON MOUNT, OR DOWN WHEN A REPORT IS OPENED
+            animation:
+              selectedReport && !closingReport
+                ? "fadeSlideDownList 0.3s ease forwards"
+                : "dashTabFadeUp 0.35s ease-out forwards",
+          }}
         >
           {activeTab === "home" && <HomeTab />}
           {activeTab === "advisory" && <AdvisoryTab />}
@@ -211,7 +270,10 @@ function ResidentDashboard({ session, onLogout }) {
           {activeTab === "profile" && <ProfileTab onLogout={onLogout} />}
         </main>
 
-        <div className="bottom-nav-wrapper">
+        <div
+          className="bottom-nav-wrapper"
+          style={{ animation: "dashNavPopUp 0.4s ease-out forwards" }} // 🌟 SYNC NAV POP UP
+        >
           <nav className="pill-nav">
             <button
               className={`nav-item ${activeTab === "home" ? "active" : ""}`}

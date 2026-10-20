@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { translations } from "../components/translations";
 import { Geolocation } from "@capacitor/geolocation";
+import { createPortal } from "react-dom";
 import {
   ChevronLeft,
   CheckCircle,
@@ -30,8 +31,11 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
   // Modals & Flows
   const [successModal, setSuccessModal] = useState(null);
   const [showDelayModal, setShowDelayModal] = useState(false);
-  const [showMap, setShowMap] = useState(false);
   const [showResolutionFlow, setShowResolutionFlow] = useState(false);
+
+  // Track Map state and animation
+  const [isMapOpen, setIsMapOpen] = useState(false);
+  const [mapExitState, setMapExitState] = useState(null);
 
   // Data & State
   const [delayReason, setDelayReason] = useState("");
@@ -362,18 +366,17 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
     }
   };
 
-  // Extract Map Rendering
-  if (showMap) {
-    return (
-      <LinemanMapOverlay
-        report={report}
-        onBack={() => setShowMap(false)}
-        linemanLocation={linemanLocation}
-        activeStatus={activeStatus}
-        t={t}
-      />
-    );
-  }
+  const handleOpenMap = () => {
+    setIsMapOpen(true);
+  };
+
+  const handleCloseMap = () => {
+    setMapExitState("back");
+    setTimeout(() => {
+      setIsMapOpen(false);
+      setMapExitState(null);
+    }, 250);
+  };
 
   // Extract Resolution Flow
   if (showResolutionFlow) {
@@ -414,6 +417,18 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         animation: "containerTransformExp 0.4s forwards",
       }}
     >
+      {/* 🌟 HORIZONTAL SLIDE KEYFRAMES FOR THE MAP */}
+      <style>{`
+        @keyframes slideInRightMap {
+          from { transform: translateX(100vw); }
+          to { transform: translateX(0); }
+        }
+        @keyframes slideOutRightMap {
+          from { transform: translateX(0); }
+          to { transform: translateX(100vw); }
+        }
+      `}</style>
+
       {/* Reusable Modals */}
       {successModal && (
         <div
@@ -821,7 +836,7 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
         )}
 
         <button
-          onClick={() => setShowMap(true)}
+          onClick={handleOpenMap}
           style={{
             width: "100%",
             padding: "16px",
@@ -980,6 +995,41 @@ function LinemanReportDetail({ report, onBack, onReportUpdated }) {
           </button>
         )}
       </div>
+
+      {/* 🌟 RENDER THE MAP VIA PORTAL WITH NEW HORIZONTAL SLIDE */}
+      {(isMapOpen || mapExitState) &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: "100vw",
+              height: "100dvh",
+              zIndex: 999999,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              overscrollBehavior: "none",
+              backgroundColor: "#f8fafc",
+              animation:
+                mapExitState === "back"
+                  ? "slideOutRightMap 0.25s ease-in forwards"
+                  : "slideInRightMap 0.3s ease-out forwards",
+            }}
+          >
+            <LinemanMapOverlay
+              report={report}
+              onBack={handleCloseMap}
+              linemanLocation={linemanLocation}
+              activeStatus={activeStatus}
+              t={t}
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

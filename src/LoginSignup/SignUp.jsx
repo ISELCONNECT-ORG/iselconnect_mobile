@@ -327,8 +327,10 @@ function SignUp({ onBack }) {
   const [errorMsg, setErrorMsg] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const formRef = useRef(null);
+  const privacyScrollRef = useRef(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [hasReadPrivacy, setHasReadPrivacy] = useState(false);
 
   const [municipalities, setMunicipalities] = useState([]);
   const [barangays, setBarangays] = useState([]);
@@ -366,6 +368,20 @@ function SignUp({ onBack }) {
       document.body.style.overflow = "";
     };
   }, [showSuccessModal]);
+
+  // Auto-enable button if content is too short to scroll
+  useEffect(() => {
+    if (signupStep === "privacy" && privacyScrollRef.current) {
+      setTimeout(() => {
+        if (privacyScrollRef.current) {
+          const { scrollHeight, clientHeight } = privacyScrollRef.current;
+          if (scrollHeight <= clientHeight + 5) {
+            setHasReadPrivacy(true);
+          }
+        }
+      }, 100);
+    }
+  }, [signupStep]);
 
   useEffect(() => {
     const fetchMunicipalities = async () => {
@@ -666,6 +682,13 @@ function SignUp({ onBack }) {
     else onBack();
   };
 
+  const handlePrivacyScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    if (Math.ceil(scrollTop + clientHeight) >= scrollHeight - 5) {
+      setHasReadPrivacy(true);
+    }
+  };
+
   const inputStyle = (name) => ({
     padding: "14px 20px",
     ...(fieldErrors[name] ? { border: "1px solid #ff0000" } : {}),
@@ -803,15 +826,14 @@ function SignUp({ onBack }) {
           paddingTop: "25px",
           paddingBottom: "25px",
           flex: 1,
-          overflowY:
-            signupStep === "id-scan" || signupStep === "selfie-scan"
-              ? "hidden"
-              : "auto",
+          overflowY: ["id-scan", "selfie-scan", "privacy"].includes(signupStep)
+            ? "hidden"
+            : "auto",
           display: "flex",
           flexDirection: "column",
           position: "relative",
           zIndex: 2,
-          borderRadius: "0px", // 🌟 INSTANTLY REMOVES THE CURVE
+          borderRadius: "0px",
         }}
       >
         <div className="auth-title-container">
@@ -837,6 +859,8 @@ function SignUp({ onBack }) {
               display: "flex",
               flexDirection: "column",
               animation: "contentFade 0.3s ease-out",
+              flex: 1,
+              overflow: "hidden",
             }}
           >
             <div
@@ -845,26 +869,39 @@ function SignUp({ onBack }) {
                 padding: "20px",
                 borderRadius: "15px",
                 boxShadow: "inset 0 2px 4px rgba(0,0,0,0.05)",
+                display: "flex",
+                flexDirection: "column",
+                flex: 1,
+                overflow: "hidden",
               }}
             >
               <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: "10px",
                   marginBottom: "15px",
                   color: "#1b0b8c",
+                  flexShrink: 0,
                 }}
               >
-                <ShieldCheck size={28} />
+                <ShieldCheck size={28} style={{ marginTop: "2px" }} />
                 <h3
-                  style={{ margin: 0, fontWeight: "900", fontSize: "1.1rem" }}
+                  style={{
+                    margin: 0,
+                    fontWeight: "900",
+                    fontSize: "1.1rem",
+                    lineHeight: "1.3",
+                  }}
                 >
-                  Data Privacy & Verification
+                  Data Privacy &<br />
+                  Verification
                 </h3>
               </div>
 
               <div
+                ref={privacyScrollRef}
+                onScroll={handlePrivacyScroll}
                 style={{
                   padding: "15px",
                   backgroundColor: "#f8fafc",
@@ -873,11 +910,18 @@ function SignUp({ onBack }) {
                   fontSize: "0.85rem",
                   color: "#475569",
                   lineHeight: "1.6",
+                  overflowY: "auto",
+                  flex: 1,
                 }}
               >
-                <p style={{ marginTop: 0 }}>
-                  Welcome to <strong>ISELCONNECT</strong>. Please read our Data
-                  Privacy guidelines carefully.
+                <p style={{ marginTop: 0, marginBottom: "15px" }}>
+                  Welcome to <strong>ISELCONNECT</strong>. By proceeding, you
+                  consent to the collection and processing of your personal
+                  information in accordance with the{" "}
+                  <strong>
+                    Data Privacy Act of 2012 (Republic Act No. 10173)
+                  </strong>
+                  .
                 </p>
 
                 <p
@@ -887,25 +931,12 @@ function SignUp({ onBack }) {
                     margin: "10px 0 4px 0",
                   }}
                 >
-                  1. Compliance with the Law
+                  1. Information We Collect
                 </p>
-                <p style={{ margin: 0 }}>
-                  In compliance with <strong>Republic Act No. 10173</strong>,
-                  your data is processed securely.
-                </p>
-
-                <p
-                  style={{
-                    color: "#1b0b8c",
-                    fontWeight: "bold",
-                    margin: "10px 0 4px 0",
-                  }}
-                >
-                  2. Information We Collect
-                </p>
-                <p style={{ margin: 0 }}>
-                  We collect your name, address, mobile, email, ID photo, and
-                  selfie.
+                <p style={{ margin: "0 0 12px 0" }}>
+                  We require your full name, exact residential address, mobile
+                  number, email, a clear photo of a valid Government ID, and a
+                  live selfie for identity verification.
                 </p>
 
                 <p
@@ -915,11 +946,28 @@ function SignUp({ onBack }) {
                     margin: "10px 0 4px 0",
                   }}
                 >
-                  3. Purpose of Data Collection
+                  2. Purpose of Processing
                 </p>
-                <p style={{ margin: "0 0 20px 0" }}>
-                  Identity verification, accurate dispatching, and critical
-                  communication.
+                <p style={{ margin: "0 0 12px 0" }}>
+                  Your data is exclusively used to verify your identity as a
+                  legitimate resident, ensure accurate dispatching of
+                  maintenance personnel to your location, and send critical
+                  power advisories.
+                </p>
+
+                <p
+                  style={{
+                    color: "#1b0b8c",
+                    fontWeight: "bold",
+                    margin: "10px 0 4px 0",
+                  }}
+                >
+                  3. Security & Confidentiality
+                </p>
+                <p style={{ margin: "0 0 15px 0" }}>
+                  All submitted data is encrypted and securely stored. ISELCO-1
+                  will not share or sell your personal information to
+                  unauthorized third parties without explicit consent.
                 </p>
 
                 <div
@@ -931,13 +979,20 @@ function SignUp({ onBack }) {
             <div style={{ marginTop: "20px", flexShrink: 0 }}>
               <button
                 type="button"
-                className="auth-submit-btn"
                 onClick={() => setSignupStep("id-select")}
+                disabled={!hasReadPrivacy}
                 style={{
-                  backgroundColor: "#16a34a",
-                  color: "#ffffff",
-                  cursor: "pointer",
+                  backgroundColor: hasReadPrivacy ? "#16a34a" : "#94a3b8",
+                  color: hasReadPrivacy ? "#ffffff" : "#e2e8f0",
+                  cursor: hasReadPrivacy ? "pointer" : "not-allowed",
                   textTransform: "uppercase",
+                  fontWeight: "bold",
+                  padding: "15px",
+                  borderRadius: "25px",
+                  width: "100%",
+                  border: "none",
+                  fontSize: "1rem",
+                  transition: "all 0.3s ease",
                 }}
               >
                 I Agree & Proceed
